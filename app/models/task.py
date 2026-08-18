@@ -7,7 +7,7 @@ class Task(Base):
     __tablename__ = "tasks"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    column_id: Mapped[int] = mapped_column(ForeignKey("columns.id"))
+    column_id: Mapped[int] = mapped_column(ForeignKey("board_columns.id"))
     title: Mapped[str]
     description: Mapped[str | None]
     index: Mapped[float]
