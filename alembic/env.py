@@ -24,7 +24,10 @@ target_metadata = Base.metadata
 
 # override the URL from alembic.ini with the one defined in app code,
 # so the connection string only lives in one place
-config.set_main_option("sqlalchemy.url", DATABASE_URL)
+# if database url is set in another place, then it is absolutely a testing session
+# as no file sets sqlalchemy.url except the 'conftest.py'
+if not config.get_main_option("sqlalchemy.url"):
+    config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 def do_run_migrations(connection) -> None:
     context.configure(connection=connection, target_metadata=target_metadata)

@@ -22,20 +22,21 @@ def postgres_server_container():
 @pytest.fixture(scope="session")
 def apply_migrations(postgres_server_container):
     connection_url = postgres_server_container.get_connection_url().replace(
-        "postgresql://", "postgresql+asyncpg://"
-    )     # this is how we can connect the application with the containerized db server
+        "postgresql+psycopg2://", "postgresql+asyncpg://"
+    )   # this is how we can connect the application with the containerized db server
+        # uses async driver instead of the sync one
 
     alembic_cfg = Config("alembic.ini")
     alembic_cfg.set_main_option("sqlalchemy.url", connection_url)
 
-    command.upgrade(alembic_cfg, "head")
+    command.upgrade(alembic_cfg, "head")    # triggers Alembic's env.py file execution
 
 
 
 @pytest_asyncio.fixture(scope="session")    # creates an engine (that creates and manages the connections with db, the connection pool) once per testing session
 async def test_engine(postgres_server_container, apply_migrations):
     connection_url = postgres_server_container.get_connection_url().replace(
-        "postgresql://", "postgresql+asyncpg://"
+        "postgresql+psycopg2://", "postgresql+asyncpg://"
     )
     engine = create_async_engine(connection_url)
 
