@@ -1,4 +1,5 @@
 import pytest
+from sqlalchemy import event
 from testcontainers.community.postgres import PostgresContainer
 
 import pytest_asyncio
@@ -12,11 +13,12 @@ from httpx import AsyncClient, ASGITransport
 from app.main import app
 from app.core.database import get_db
 
+
+
 @pytest.fixture(scope="session")    # runs at the beginning of each testing session and reuse the same object for every test
 def postgres_server_container():
     with PostgresContainer("postgres:16") as container:
         yield container
-
 
 
 @pytest.fixture(scope="session")
@@ -32,7 +34,6 @@ def apply_migrations(postgres_server_container):
     command.upgrade(alembic_cfg, "head")    # triggers Alembic's env.py file execution
 
 
-
 @pytest_asyncio.fixture(scope="session")    # creates an engine (that creates and manages the connections with db, the connection pool) once per testing session
 async def test_engine(postgres_server_container, apply_migrations):
     connection_url = postgres_server_container.get_connection_url().replace(
@@ -45,20 +46,24 @@ async def test_engine(postgres_server_container, apply_migrations):
     await engine.dispose()
 
 
-
 @pytest_asyncio.fixture     # does real async DB work, and runs for every single testing function
 async def db_session(test_engine):
     async with test_engine.connect() as connection:
         outer_transaction = await connection.begin()    # this is always rolled back to clear the changes that happened during the test
+                                                        # we have nested inner connection to prevent the .commit() code inside te endpoints from persisting data inside the DB
 
-        session = AsyncSession(bind=connection, join_transaction_mode="create_savepoint")
+        session = AsyncSession(bind=connection, join_transaction_mode="create_savepoint")       # do not really commit and persist the changes in the database, just save the data temporarily
+
+        # this allows us to start another nested transaction (make more temporarily changes after the savepoint ends, in the same outer transaction)
+        @event.listens_for(session.sync_session, "after_transaction_end")
+        def restart_savepoint(sync_session, transaction):
+            if transaction.nested:      # transaction here is the inner/nested transaction (that is the savepoint)
+                sync_session.begin_nested()
 
         yield session
 
         await session.close()
         await outer_transaction.rollback()
-
-
 
 
 @pytest_asyncio.fixture
