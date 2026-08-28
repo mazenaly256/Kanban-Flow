@@ -21,6 +21,7 @@ def postgres_server_container():
         yield container
 
 
+
 @pytest.fixture(scope="session")
 def apply_migrations(postgres_server_container):
     connection_url = postgres_server_container.get_connection_url().replace(
@@ -46,24 +47,21 @@ async def test_engine(postgres_server_container, apply_migrations):
     await engine.dispose()
 
 
+
 @pytest_asyncio.fixture     # does real async DB work, and runs for every single testing function
 async def db_session(test_engine):
     async with test_engine.connect() as connection:
         outer_transaction = await connection.begin()    # this is always rolled back to clear the changes that happened during the test
                                                         # we have nested inner connection to prevent the .commit() code inside te endpoints from persisting data inside the DB
 
-        session = AsyncSession(bind=connection, join_transaction_mode="create_savepoint")       # do not really commit and persist the changes in the database, just save the data temporarily
-
-        # this allows us to start another nested transaction (make more temporarily changes after the savepoint ends, in the same outer transaction)
-        @event.listens_for(session.sync_session, "after_transaction_end")
-        def restart_savepoint(sync_session, transaction):
-            if transaction.nested:      # transaction here is the inner/nested transaction (that is the savepoint)
-                sync_session.begin_nested()
-
+        session = AsyncSession(bind=connection, join_transaction_mode="create_savepoint")       # do not really commit and persist the changes in the database, just save the data temporarily till the outer transaction is rolled back
+                                                                                                # makes any .commit() on the db_session ends the save point, and any new action on the session starts a new savepoint, so any .commit() actually ends the savepoint, not the outer transaction
         yield session
+
 
         await session.close()
         await outer_transaction.rollback()
+
 
 
 @pytest_asyncio.fixture
@@ -76,9 +74,10 @@ async def client(db_session):
 
     transport = ASGITransport(app=app)
 
-    async with AsyncClient(transport=transport, base_url="http://test") as async_client:    # takes base_url as there is no real server like what uvicorn introduces,
-                                                                                            # the client is in the same process as the application, so it calls it directly like an ordinary function
-                                                                                            # there is not any network involved
+
+    async with AsyncClient(transport=transport, base_url="http://test") as async_client:    # Takes base_url as there is no real server like what uvicorn introduces,
+                                                                                            # The client is in the same process as the application, so it calls it directly like an ordinary function. There is not any network involved
         yield async_client
+
 
     app.dependency_overrides.clear()    # just for cleanliness
