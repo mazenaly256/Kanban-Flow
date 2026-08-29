@@ -22,4 +22,10 @@ def issue_jwt_access_token(user_id: int) -> str:
 
 
 def decode_jwt_access_token(token: str) -> dict | None:
-    return None
+    try:
+        payload = jwt.decode(jwt=token, key=JWT_SECRET_KEY, algorithms=[HASHING_ALGORITHM])
+
+    except InvalidTokenError:  # To catch expired, tampered, malformed or any invalid tokens
+        return None
+
+    return payload
