@@ -38,5 +38,5 @@ async def test_successful_login_returns_200_and_login_response_schema(client, db
     # Assert
     assert response.status_code == status.HTTP_200_OK
 
-    assert "access_token" in response_body
+    assert "access_token" in response_body and response_body["access_token"]
     assert ("token_type" in response_body) and (response_body["token_type"] == "bearer")
