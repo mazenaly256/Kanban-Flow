@@ -1,13 +1,15 @@
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from starlette import status
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from app.core.database import get_db
+from app.core.security import issue_jwt_access_token
 from app.models import User
-from app.schemas import UserCreate, UserRead
+from app.schemas import UserCreate, UserRead, LoginResponse, LoginRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -46,3 +48,37 @@ async def register(user_request_model: UserCreate, db: AsyncSession = Depends(ge
     await db.refresh(new_user)
 
     return UserRead(id=new_user.id, email=new_user.email, username=new_user.username)
+
+
+
+@router.post(
+    path="/login",
+    status_code=status.HTTP_200_OK,
+    response_model=LoginResponse,
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {"description": "Invalid Email or Password."},
+        status.HTTP_200_OK: {"description": "Successful Login"}
+    }
+)
+async def login(login_request_model: LoginRequest, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(User).where(User.email == login_request_model.email)
+    )
+    user: User | None = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email or username is wrong")
+
+    is_valid_password: bool = await run_in_threadpool(      # Uses a thread from the threadpool to prevent blocking the main single thread of the main single event loop
+        bcrypt.checkpw,
+        login_request_model.password.encode(),
+        user.hashed_password.encode()
+    )
+
+    if not is_valid_password:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email or username is wrong")
+
+
+    token = issue_jwt_access_token(user.id)
+
+    return LoginResponse(access_token=token, token_type="bearer")
