@@ -1,5 +1,7 @@
 from datetime import datetime, timezone, timedelta
 import jwt
+from jwt import InvalidTokenError
+
 from app.core.config import settings
 
 
@@ -17,3 +19,7 @@ def issue_jwt_access_token(user_id: int) -> str:
     }
 
     return jwt.encode(payload=payload, key=JWT_SECRET_KEY, algorithm=HASHING_ALGORITHM)
+
+
+def decode_jwt_access_token(token: str) -> dict | None:
+    return None
