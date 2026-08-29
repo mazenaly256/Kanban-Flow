@@ -3,6 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from starlette import status
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
+
 from app.core.database import get_db
 from app.models import User
 from app.schemas import UserCreate, UserRead
@@ -22,7 +24,11 @@ async def register(user_request_model: UserCreate, db: AsyncSession = Depends(ge
     new_user = User(
         email=user_request_model.email,
         username=user_request_model.username,
-        hashed_password=bcrypt.hashpw(user_request_model.password.encode(), bcrypt.gensalt()).decode()
+        hashed_password= (await run_in_threadpool(
+            bcrypt.hashpw,
+            user_request_model.password.encode(),
+            bcrypt.gensalt()
+        )).decode()     # .decode() converts the hashing result to a string
     )
 
     db.add(new_user)
