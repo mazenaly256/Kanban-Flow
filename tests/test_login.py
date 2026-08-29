@@ -1,12 +1,11 @@
 import bcrypt
-from _pytest import reports
 from starlette import status
 from starlette.concurrency import run_in_threadpool
 
 from app.models import User
 
 
-async def test_successful_login_returns_200(client, db_session):
+async def test_successful_login_returns_200_and_login_response_schema(client, db_session):
     # Arrange
     mock_user_email = "dummyemail@example.com"
     mock_user_password = "dummy_password_for_testing"
