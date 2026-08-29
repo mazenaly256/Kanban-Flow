@@ -1,4 +1,5 @@
 import bcrypt
+import pytest
 from starlette import status
 from starlette.concurrency import run_in_threadpool
 
@@ -75,3 +76,69 @@ async def test_successful_login_returns_a_valid_jwt_token(client, db_session):
     # Assert
     assert payload is not None
     assert int(payload.get("sub")) == mock_user.id
+
+
+@pytest.mark.parametrize(
+    "login_request_body",
+    [
+        {"email": "invalidemail", "password": "any dummy password"},    # invalid email format
+        {"email": "dummyemail@example.com"},                            # missing password
+        {"password": "any dummy password"}                              # missing email
+    ],
+    ids=["invalid email format", "missing password field", "missing email"]
+)
+async def test_invalid_request_returns_422(client, db_session, login_request_body):
+    # Act
+    response = await client.post("/auth/login", json=login_request_body)
+
+
+    # Assert
+    assert response.status_code == status.HTTP_422_UNPROCESSABLE_CONTENT
+
+
+async def test_email_does_not_exist_returns_401(client, db_session):
+    # Arrange
+    login_request_body = {
+        "email": "anyinexistentvalidemail@example.com",
+        "password": "any dummy_password",
+    }
+
+    # Act
+    response = await client.post("/auth/login", json=login_request_body)
+    response_body = response.json()  # converts JSON body into python dictionary
+
+    # Assert
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+
+async def test_wrong_password_returns_401(client, db_session):
+    # Arrange
+    mock_user_email = "dummyemail@example.com"
+    mock_user_password = "dummy_password_for_testing"
+
+    test_user = User(
+        email=mock_user_email,
+        username="test_user",
+        hashed_password=(await run_in_threadpool(
+            bcrypt.hashpw,
+            mock_user_password.encode(),
+            bcrypt.gensalt()
+        )).decode()
+    )
+
+    db_session.add(test_user)
+    await db_session.commit()
+
+
+    # Act
+    login_request_body = {
+        "email": mock_user_email,
+        "password": "Wrong Password"
+    }
+
+    response = await client.post("/auth/login", json=login_request_body)
+    response_body = response.json()  # converts JSON body into python dictionary
+
+
+    # Assert
+    assert response.status_code == status.HTTP_401_UNAUTHORIZED
