@@ -50,6 +50,7 @@ async def test_engine(postgres_server_container, apply_migrations):
 
 @pytest_asyncio.fixture     # does real async DB work, and runs for every single testing function
 async def db_session(test_engine):
+    # Each test has its own db_session, so each test has its own separate outer transaction
     async with test_engine.connect() as connection:
         outer_transaction = await connection.begin()    # this is always rolled back to clear the changes that happened during the test
                                                         # we have nested inner connection to prevent the .commit() code inside te endpoints from persisting data inside the DB
