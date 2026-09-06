@@ -53,7 +53,6 @@ async def db_session(test_engine):
     # Each test has its own db_session, so each test has its own separate outer transaction
     async with test_engine.connect() as connection:
         outer_transaction = await connection.begin()    # this is always rolled back to clear the changes that happened during the test
-                                                        # we have nested inner connection to prevent the .commit() code inside te endpoints from persisting data inside the DB
 
         session = AsyncSession(bind=connection, join_transaction_mode="create_savepoint")       # do not really commit and persist the changes in the database, just save the data temporarily till the outer transaction is rolled back
                                                                                                 # makes any .commit() on the db_session ends the save point, and any new action on the session starts a new savepoint, so any .commit() actually ends the savepoint, not the outer transaction
@@ -61,7 +60,7 @@ async def db_session(test_engine):
 
 
         await session.close()
-        await outer_transaction.rollback()
+        await outer_transaction.rollback()  # each testing method has it own separate transaction on DB server, the outer transaction is rolled back here
 
 
 
