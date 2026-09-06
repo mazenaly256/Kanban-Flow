@@ -12,7 +12,7 @@ async def test_successful_login_returns_200_and_login_response_schema(client, db
     mock_user_email = "dummyemail@example.com"
     mock_user_password = "dummy_password_for_testing"
 
-    test_user = User(
+    test_user = User(   # insert user directly into DB to avoid testing register functionality in this test
         email=mock_user_email,
         username="test_user",
         hashed_password=(await run_in_threadpool(
