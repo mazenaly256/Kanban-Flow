@@ -76,7 +76,7 @@ async def login(login_request_model: LoginRequest, db: AsyncSession = Depends(ge
     )
 
     if not is_valid_password:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email or username is wrong")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Wrong Email or password")
 
 
     token = issue_jwt_access_token(user.id)
