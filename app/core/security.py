@@ -63,13 +63,16 @@ async def get_current_user(authorization_header: HTTPAuthorizationCredentials = 
 
 async def require_owner_privilege(board_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db) ):   # FastAPI detects that inside the endpoint there is board_id parameter and also required here so it injects its value automatically
     result = await db.execute(
-        select(UserBoardRole.role).where(UserBoardRole.board_id == board_id, UserBoardRole.user_id == user.id)
+        select(UserBoardRole).where(UserBoardRole.board_id == board_id, UserBoardRole.user_id == user.id)
     )
 
     user_board_role = result.scalar_one_or_none()
 
-    if user_board_role != "owner":
+    if user_board_role is None:
+        raise HTTPException(status_code=403, detail="You have no access on the requested board, or board does not exist.")
+
+    if user_board_role.role != "owner":
         raise HTTPException(status_code=403, detail="Only owner can access this resource.")
 
     else:
-        return user
+        return user_board_role

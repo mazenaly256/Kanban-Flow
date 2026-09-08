@@ -46,6 +46,9 @@ async def create_board(new_board_from_request: BoardCreate, db: AsyncSession = D
 
     await db.commit()   # tries to persist the changes to database in atomicity, both inserting new board and inserting the user-role for the board
 
+    await db.refresh(new_board)
+
+    return BoardRead(board_id=new_board.id, board_title=new_board.title, role="owner")
 
 
 
@@ -58,13 +61,8 @@ async def create_board(new_board_from_request: BoardCreate, db: AsyncSession = D
         204: {"description": "Deleted Successfully"}
     }
 )
-async def delete_board(board_id: int = Path(), db: AsyncSession = Depends(get_db), user: User = Depends(require_owner_privilege)):
-    result = await db.execute(
-        select(UserBoardRole).where(UserBoardRole.board_id == board_id, UserBoardRole.user_id == user.id)
-    )
-    user_role = result.scalar_one_or_none()
-
-    await db.delete(user_role)
+async def delete_board(board_id: int = Path(), db: AsyncSession = Depends(get_db), user_board_role: UserBoardRole = Depends(require_owner_privilege)):
+    await db.delete(user_board_role)
 
     result = await db.execute(
         select(Board).where(Board.id == board_id)
