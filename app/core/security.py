@@ -8,7 +8,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Depends, HTTPException
 
 from app.core.database import get_db
-from app.models import User
+from app.models import User, UserBoardRole
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -52,10 +52,24 @@ async def get_current_user(authorization_header: HTTPAuthorizationCredentials = 
     else:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    result = await db.execute(select(User).filter(User.id == int(user_id)))
+    result = await db.execute(select(User).where(User.id == int(user_id)))
     user_from_db = result.scalar_one_or_none()
 
     if user_from_db is None:
         raise HTTPException(status_code=401, detail="User not found")
 
     return user_from_db
+
+
+async def require_owner_privilege(board_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db) ):   # FastAPI detects that inside the endpoint there is board_id parameter and also required here so it injects its value automatically
+    result = await db.execute(
+        select(UserBoardRole.role).where(UserBoardRole.board_id == board_id, UserBoardRole.user_id == user.id)
+    )
+
+    user_board_role = result.scalar_one_or_none()
+
+    if user_board_role != "owner":
+        raise HTTPException(status_code=403, detail="Only owner can access this resource.")
+
+    else:
+        return user

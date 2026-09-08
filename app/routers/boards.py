@@ -5,7 +5,7 @@ from sqlalchemy import select
 from starlette import status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
-from app.core.security import get_current_user
+from app.core.security import get_current_user, require_owner_privilege
 from app.models import User, UserBoardRole, Board
 from app.schemas import BoardRead, BoardCreate
 
@@ -53,11 +53,12 @@ async def create_board(new_board_from_request: BoardCreate, db: AsyncSession = D
     path="/{board_id}/",
     status_code=status.HTTP_204_NO_CONTENT,
     responses={
-        404: {"description": "Not Found"},
+        404: {"description": "Board not found"},
+        403: {"description": "Unauthorized to delete this resource"},
         204: {"description": "Deleted Successfully"}
     }
 )
-async def delete_board(board_id: int = Path(), db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def delete_board(board_id: int = Path(), db: AsyncSession = Depends(get_db), user: User = Depends(require_owner_privilege)):
     result = await db.execute(
         select(UserBoardRole).where(UserBoardRole.board_id == board_id, UserBoardRole.user_id == user.id)
     )
