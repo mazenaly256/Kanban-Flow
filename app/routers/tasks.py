@@ -20,6 +20,16 @@ router = APIRouter(prefix="/boards/{board_id}/columns/{column_id}", tags=["tasks
 )
 async def get_all_tasks_in_column(board_id: int, column_id: int, db: AsyncSession = Depends(get_db), _ = Depends(require_board_member)):
     result = await db.execute(
+        select(BoardColumn).where(BoardColumn.id == column_id, BoardColumn.board_id == board_id)
+    )
+
+    column = result.scalar_one_or_none()
+
+    if column is None:
+        raise HTTPException(status_code=404, detail="Column not found in the requested board")
+
+
+    result = await db.execute(
         select(Task).where(Task.column_id == column_id).order_by(Task.index)
     )
 
