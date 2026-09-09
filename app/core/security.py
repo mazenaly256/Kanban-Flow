@@ -84,3 +84,9 @@ async def require_owner_privileges(user_board_role: UserBoardRole = Depends(requ
 async def require_manager_privileges_or_higher(user_board_role: UserBoardRole = Depends(require_board_member)):
     if user_board_role.role != "owner" and user_board_role.role != "manager":
         raise HTTPException(status_code=403, detail="Access Denied, This action requires at least manager privileges.")
+
+
+
+async def require_assignee_privileges_or_higher(user_board_role: UserBoardRole = Depends(require_board_member)):
+    if user_board_role.role != "owner" and user_board_role.role != "manager" and user_board_role.role != "assignee":
+        raise HTTPException(status_code=403, detail="Access Denied, This action requires at least assignee privileges, viewers can not take this action.")
