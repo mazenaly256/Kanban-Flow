@@ -12,3 +12,14 @@ class TaskRead(BaseModel):
 class TaskCreate(BaseModel):
     task_title: str
     task_description: str
+
+
+
+class TaskUpdateTitleAndDescription(BaseModel):
+    new_title: str
+    new_description: str
+
+
+
+
+
