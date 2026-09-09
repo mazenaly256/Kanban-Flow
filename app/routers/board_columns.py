@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, Path, HTTPException
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
@@ -33,7 +33,7 @@ async def get_board_columns(board_id: int = Path(), db: AsyncSession = Depends(g
     path="/",
     status_code=status.HTTP_201_CREATED,
 )
-async def create_board_column(board_id: int, new_column_from_request: BoardColumnCreate, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db)):
+async def create_new_column(new_column_from_request: BoardColumnCreate, board_id: int, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
     select(func.max(BoardColumn.index)).where(BoardColumn.board_id == board_id)
 )
@@ -48,3 +48,20 @@ async def create_board_column(board_id: int, new_column_from_request: BoardColum
     return new_board_column.id
 
 
+@router.delete(
+    path="/{column_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+# board_id is required for FastAPI DI container to resolve the board_id parameter in the dependencies (to authorize the access to the board)
+async def delete_column(column_id: int, board_id: int, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(BoardColumn).where(BoardColumn.id == column_id, BoardColumn.board_id == board_id)
+)
+
+    column = result.scalar_one_or_none()
+
+    if column is None:
+        raise HTTPException(status_code=404, detail="Column not found in the target board")
+
+    await db.delete(column)
+    await db.commit()
