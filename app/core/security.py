@@ -75,6 +75,12 @@ async def require_board_member(board_id: int, user: User = Depends(get_current_u
         return user_board_role
 
 
-async def require_owner_privileges(user_board_role: UserBoardRole = Depends(require_board_member), db: AsyncSession = Depends(get_db) ):   # FastAPI detects that inside the endpoint there is board_id parameter and also required here so it injects its value automatically
+async def require_owner_privileges(user_board_role: UserBoardRole = Depends(require_board_member)):
     if user_board_role.role != "owner":
         raise HTTPException(status_code=403, detail="Access Denied, This action requires owner privileges.")
+
+
+
+async def require_manager_privileges_or_higher(user_board_role: UserBoardRole = Depends(require_board_member)):
+    if user_board_role.role != "owner" and user_board_role.role != "manager":
+        raise HTTPException(status_code=403, detail="Access Denied, This action requires at least manager privileges.")
