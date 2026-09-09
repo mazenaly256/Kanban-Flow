@@ -5,7 +5,7 @@ from sqlalchemy import select
 from starlette import status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
-from app.core.security import get_current_user, require_owner_privilege
+from app.core.security import get_current_user, require_owner_privileges
 from app.models import User, UserBoardRole, Board
 from app.schemas import BoardRead, BoardCreate
 
@@ -61,9 +61,7 @@ async def create_board(new_board_from_request: BoardCreate, db: AsyncSession = D
         204: {"description": "Deleted Successfully"}
     }
 )
-async def delete_board(board_id: int = Path(), db: AsyncSession = Depends(get_db), user_board_role: UserBoardRole = Depends(require_owner_privilege)):
-    await db.delete(user_board_role)
-
+async def delete_board(board_id: int = Path(), db: AsyncSession = Depends(get_db), _ = Depends(require_owner_privileges)):
     result = await db.execute(
         select(Board).where(Board.id == board_id)
     )
