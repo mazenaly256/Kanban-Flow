@@ -61,7 +61,7 @@ async def get_current_user(authorization_header: HTTPAuthorizationCredentials = 
     return user_from_db
 
 
-async def require_owner_privilege(board_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db) ):   # FastAPI detects that inside the endpoint there is board_id parameter and also required here so it injects its value automatically
+async def require_board_member(board_id: int, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):   # FastAPI detects that inside the endpoint there is board_id parameter and also required here so it injects its value automatically
     result = await db.execute(
         select(UserBoardRole).where(UserBoardRole.board_id == board_id, UserBoardRole.user_id == user.id)
     )
@@ -69,10 +69,12 @@ async def require_owner_privilege(board_id: int, user: User = Depends(get_curren
     user_board_role = result.scalar_one_or_none()
 
     if user_board_role is None:
-        raise HTTPException(status_code=403, detail="You have no access on the requested board, or board does not exist.")
-
-    if user_board_role.role != "owner":
-        raise HTTPException(status_code=403, detail="Only owner can access this resource.")
+        raise HTTPException(status_code=403, detail="Access denied, you are not permitted to access this board.")
 
     else:
         return user_board_role
+
+
+async def require_owner_privileges(user_board_role: UserBoardRole = Depends(require_board_member), db: AsyncSession = Depends(get_db) ):   # FastAPI detects that inside the endpoint there is board_id parameter and also required here so it injects its value automatically
+    if user_board_role.role != "owner":
+        raise HTTPException(status_code=403, detail="Access Denied, This action requires owner privileges.")
