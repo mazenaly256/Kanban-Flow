@@ -22,10 +22,15 @@ class TaskUpdateTitleAndDescription(BaseModel):
 
 
 
-class TaskUpdatePositionIndex(BaseModel):
+class TaskUpdatePosition(BaseModel):
+    destination_column_id: int
+
     destination_predecessor_task_index: float = Field(
-        description="Index of the task immediately before the new position. Pass -1 if moving to the very top of the column (no predecessor)."
+        default=-1,
+        description="Index of the task immediately before the new position in the destination column. Pass -1 if moving to the very top of the column (no predecessor)."
     )
+
     destination_successor_task_index: float = Field(
-        description="Index of the task immediately after the new position. Pass -1 if moving to the very bottom of the column (no successor)."
+        default=-1,
+        description="Index of the task immediately after the new position in the destination column. Pass -1 if moving to the very bottom of the column (no successor)."
     )

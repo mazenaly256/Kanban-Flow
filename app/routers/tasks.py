@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
@@ -8,7 +8,8 @@ from starlette import status
 from app.core.database import get_db
 from app.core.security import require_board_member, require_manager_privileges_or_higher
 from app.models import Task, BoardColumn
-from app.schemas.task import TaskRead, TaskCreate, TaskUpdateTitleAndDescription, TaskUpdatePositionIndex
+from app.schemas.task import TaskRead, TaskCreate, TaskUpdateTitleAndDescription, TaskUpdatePositionIndex, \
+    TaskUpdateChangeColumnAndPositionIndex
 
 router = APIRouter(prefix="/boards/{board_id}/columns/{column_id}", tags=["tasks"])
 
@@ -81,9 +82,9 @@ async def update_task_title_and_description(task_id: int, board_id: int, column_
 @router.patch(
     path="/{task_id}/",
     status_code=status.HTTP_204_NO_CONTENT,
-    description="Reorders a task within its column.",
+    description="Updates the task position, including the column and its order between tasks in the column",
 )
-async def update_task_position_index_in_the_column(task_id: int, board_id: int, column_id: int, task_update_index_dto: TaskUpdatePositionIndex, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db)):
+async def update_task_position(task_id: int, board_id: int, column_id: int, task_change_column_and_update_index_dto: TaskUpdateChangeColumnAndPositionIndex, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Task).join(BoardColumn, BoardColumn.id == Task.column_id).where(Task.id == task_id, Task.column_id == column_id, BoardColumn.board_id == board_id)
     )
@@ -91,20 +92,38 @@ async def update_task_position_index_in_the_column(task_id: int, board_id: int, 
     task: Task | None = result.scalar_one_or_none()
 
     if task is None:
-        raise HTTPException(status_code=404, detail="Task not found in the target column and board")
+        raise HTTPException(status_code=404, detail="Task not found in the requested column and board")
 
-    if task_update_index_dto.destination_predecessor_task_index == -1 and task_update_index_dto.destination_successor_task_index == -1: # when the task is inserted in an empty column
-        task_update_index_dto.destination_predecessor_task_index = task_update_index_dto.destination_successor_task_index = 1
 
-    elif task_update_index_dto.destination_predecessor_task_index == -1:
-        task_update_index_dto.destination_predecessor_task_index = task_update_index_dto.destination_successor_task_index - 1
+    result = await db.execute(
+        select(BoardColumn).where(BoardColumn.id == task_change_column_and_update_index_dto.destination_column_id)
+    )
 
-    elif task_update_index_dto.destination_successor_task_index == -1:
-        task_update_index_dto.destination_successor_task_index = task_update_index_dto.destination_predecessor_task_index + 1
+    new_column: BoardColumn | None = result.scalar_one_or_none()
 
-    task.index = (task_update_index_dto.destination_predecessor_task_index + task_update_index_dto.destination_successor_task_index) / 2.0
+    if new_column is None:  # task is transferred to another column in another board
+        raise HTTPException(status_code=404, detail="Destination column not found")
+
+    if new_column.board_id != board_id:
+        raise HTTPException(status_code=400, detail="Task can only be transferred to another column in the same board.")
+
+    task.column_id = new_column.id
+
+
+    if task_change_column_and_update_index_dto.destination_predecessor_task_index == -1 and task_change_column_and_update_index_dto.destination_successor_task_index == -1: # when the task is inserted in an empty column
+        task_change_column_and_update_index_dto.destination_predecessor_task_index = task_change_column_and_update_index_dto.destination_successor_task_index = 1
+
+    elif task_change_column_and_update_index_dto.destination_predecessor_task_index == -1:
+        task_change_column_and_update_index_dto.destination_predecessor_task_index = task_change_column_and_update_index_dto.destination_successor_task_index - 1
+
+    elif task_change_column_and_update_index_dto.destination_successor_task_index == -1:
+        task_change_column_and_update_index_dto.destination_successor_task_index = task_change_column_and_update_index_dto.destination_predecessor_task_index + 1
+
+
+    task.index = (task_change_column_and_update_index_dto.destination_predecessor_task_index + task_change_column_and_update_index_dto.destination_successor_task_index) / 2.0
 
     await db.commit()
+
 
 
 
