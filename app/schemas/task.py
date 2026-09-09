@@ -22,7 +22,7 @@ class TaskUpdateTitleAndDescription(BaseModel):
 
 
 
-class TaskUpdatePosition(BaseModel):
+class TaskUpdateChangeColumnAndPositionIndex(BaseModel):
     destination_column_id: int
 
     destination_predecessor_task_index: float = Field(

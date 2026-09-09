@@ -8,8 +8,8 @@ from starlette import status
 from app.core.database import get_db
 from app.core.security import require_board_member, require_manager_privileges_or_higher
 from app.models import Task, BoardColumn
-from app.schemas.task import TaskRead, TaskCreate, TaskUpdateTitleAndDescription, TaskUpdatePositionIndex, \
-    TaskUpdateChangeColumnAndPositionIndex
+from app.schemas.task import TaskRead, TaskCreate, TaskUpdateTitleAndDescription, TaskUpdateChangeColumnAndPositionIndex
+
 
 router = APIRouter(prefix="/boards/{board_id}/columns/{column_id}", tags=["tasks"])
 
