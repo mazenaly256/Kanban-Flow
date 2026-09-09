@@ -1,4 +1,5 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
 
 class TaskRead(BaseModel):
     id: int
@@ -21,5 +22,10 @@ class TaskUpdateTitleAndDescription(BaseModel):
 
 
 
-
-
+class TaskUpdatePositionIndex(BaseModel):
+    destination_predecessor_task_index: float = Field(
+        description="Index of the task immediately before the new position. Pass -1 if moving to the very top of the column (no predecessor)."
+    )
+    destination_successor_task_index: float = Field(
+        description="Index of the task immediately after the new position. Pass -1 if moving to the very bottom of the column (no successor)."
+    )

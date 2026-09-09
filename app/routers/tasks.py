@@ -8,7 +8,7 @@ from starlette import status
 from app.core.database import get_db
 from app.core.security import require_board_member, require_manager_privileges_or_higher
 from app.models import Task, BoardColumn
-from app.schemas.task import TaskRead, TaskCreate, TaskUpdateTitleAndDescription
+from app.schemas.task import TaskRead, TaskCreate, TaskUpdateTitleAndDescription, TaskUpdatePositionIndex
 
 router = APIRouter(prefix="/boards/{board_id}/columns/{column_id}", tags=["tasks"])
 
@@ -77,6 +77,34 @@ async def update_task_title_and_description(task_id: int, board_id: int, column_
     await db.commit()
 
 
+
+@router.patch(
+    path="/{task_id}/",
+    status_code=status.HTTP_204_NO_CONTENT,
+    description="Reorders a task within its column.",
+)
+async def update_task_position_index_in_the_column(task_id: int, board_id: int, column_id: int, task_update_index_dto: TaskUpdatePositionIndex, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Task).join(BoardColumn, BoardColumn.id == Task.column_id).where(Task.id == task_id, Task.column_id == column_id, BoardColumn.board_id == board_id)
+    )
+
+    task: Task | None = result.scalar_one_or_none()
+
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found in the target column and board")
+
+    if task_update_index_dto.destination_predecessor_task_index == -1 and task_update_index_dto.destination_successor_task_index == -1: # when the task is inserted in an empty column
+        task_update_index_dto.destination_predecessor_task_index = task_update_index_dto.destination_successor_task_index = 1
+
+    elif task_update_index_dto.destination_predecessor_task_index == -1:
+        task_update_index_dto.destination_predecessor_task_index = task_update_index_dto.destination_successor_task_index - 1
+
+    elif task_update_index_dto.destination_successor_task_index == -1:
+        task_update_index_dto.destination_successor_task_index = task_update_index_dto.destination_predecessor_task_index + 1
+
+    task.index = (task_update_index_dto.destination_predecessor_task_index + task_update_index_dto.destination_successor_task_index) / 2.0
+
+    await db.commit()
 
 
 
