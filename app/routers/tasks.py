@@ -58,7 +58,7 @@ async def create_new_task(task_create_dto: TaskCreate, board_id: int, column_id:
 
 
 @router.patch(
-    path="/{task_id}/",
+    path="/{task_id}/details",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 async def update_task_title_and_description(task_id: int, board_id: int, column_id: int, task_update_dto: TaskUpdateTitleAndDescription, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db)):
@@ -80,7 +80,7 @@ async def update_task_title_and_description(task_id: int, board_id: int, column_
 
 
 @router.patch(
-    path="/{task_id}/",
+    path="/{task_id}/position",
     status_code=status.HTTP_204_NO_CONTENT,
     description="Updates the task position, including the column and its order between tasks in the column",
 )
