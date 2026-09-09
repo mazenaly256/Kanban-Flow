@@ -1,11 +1,10 @@
 from pydantic import BaseModel
 
 class TaskRead(BaseModel):
-    task_id: int
+    id: int
     column_id: int
-    column_title: str
-    task_title: str
-    task_description: str
+    title: str
+    description: str
     # index/position of the task is not required to be shown, it is just for ordering the tasks
 
 
