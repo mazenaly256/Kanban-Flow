@@ -48,3 +48,21 @@ async def create_new_task(task_create_dto: TaskCreate, board_id: int, column_id:
     return new_task.id
 
 
+
+@router.delete(
+    path="/{task_id}/",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+# board_id is required for FastAPI DI container to resolve the board_id parameter in the dependencies (to authorize the access to the board)
+async def delete_task(task_id: int, column_id: int, board_id: int, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(
+        select(Task).join(BoardColumn, BoardColumn.id == Task.column_id).where(Task.id == task_id, Task.column_id == column_id, BoardColumn.board_id == board_id)
+    )
+
+    task = result.scalar_one_or_none()
+
+    if task is None:
+        raise HTTPException(status_code=404, detail="Task not found in the target column and board")
+
+    await db.delete(task)
+    await db.commit()
