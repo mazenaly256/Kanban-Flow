@@ -35,11 +35,20 @@ async def get_all_tasks_in_column(board_id: int, column_id: int, db: AsyncSessio
 )
 async def create_new_task(task_create_dto: TaskCreate, board_id: int, column_id: int, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
+        select(BoardColumn).where(BoardColumn.id == column_id, BoardColumn.board_id == board_id)
+    )
+
+    column = result.scalar_one_or_none()
+
+    if column is None:
+        raise HTTPException(status_code=404, detail="Column not found in the target board")
+
+    result = await db.execute(
         select(func.max(Task.index)).where(Task.column_id == column_id)
     )
 
     new_task_index = (result.scalar_one_or_none() or 0) + 1
-    new_task = Task(column_id=task_create_dto.column_id, title=task_create_dto.task_title, description=task_create_dto.task_description, index=new_task_index)
+    new_task = Task(column_id=column_id, title=task_create_dto.task_title, description=task_create_dto.task_description, index=new_task_index)
 
     db.add(new_task)
     await db.commit()

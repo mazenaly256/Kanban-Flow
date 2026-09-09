@@ -10,6 +10,5 @@ class TaskRead(BaseModel):
 
 
 class TaskCreate(BaseModel):
-    column_id: int
     task_title: str
     task_description: str
