@@ -113,6 +113,14 @@ async def add_new_member_role(new_member_model: BoardMemberCreate, board_id: int
     if not board:
         raise HTTPException(status_code=404, detail="Board Not Found")
 
+    result = await db.execute(
+        select(User).where(User.id == new_member_model.user_id)
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="User Not Found")
+
     new_user_board_role = UserBoardRole(user_id=new_member_model.user_id, board_id=board_id, role=new_member_model.role)
     db.add(new_user_board_role)
 
@@ -120,6 +128,7 @@ async def add_new_member_role(new_member_model: BoardMemberCreate, board_id: int
         await db.commit()
 
     except IntegrityError:
+        await db.rollback()     # resetting the connection's transaction state so it's safe to reuse
         raise HTTPException(status_code=409, detail="User already has a role on this board")
 
 
