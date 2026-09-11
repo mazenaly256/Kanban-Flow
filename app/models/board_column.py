@@ -6,7 +6,9 @@ from sqlalchemy.orm import mapped_column, Mapped, relationship
 from app.core.database import Base
 
 if TYPE_CHECKING:   # to avoid circular dependency
+    from app.models.board import Board
     from app.models.task import Task
+
 
 class BoardColumn(Base):
     __tablename__ = "board_columns"
@@ -16,4 +18,5 @@ class BoardColumn(Base):
     title: Mapped[str]
     index: Mapped[float]
 
+    board: Mapped["Board"] = relationship(back_populates="columns")
     tasks: Mapped[list["Task"]] = relationship(back_populates="column")     # navigation property to be able to traverse the related tasks
