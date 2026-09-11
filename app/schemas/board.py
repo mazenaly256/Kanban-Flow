@@ -11,3 +11,17 @@ class BoardRead(BaseModel):
 
 class BoardCreate(BaseModel):
     board_title: str
+
+
+class BoardMemberRead(BaseModel):
+    user_id: int
+    role: Literal["owner", "manager", "assignee", "viewer"]
+
+
+class BoardMemberCreate(BaseModel):
+    user_id: int
+    role: Literal["manager", "assignee", "viewer"]
+
+
+class BoardMemberUpdate(BaseModel):
+    new_role: Literal["manager", "assignee", "viewer"]
