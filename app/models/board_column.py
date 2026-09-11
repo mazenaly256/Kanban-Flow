@@ -19,4 +19,4 @@ class BoardColumn(Base):
     index: Mapped[float]
 
     board: Mapped["Board"] = relationship(back_populates="columns")
-    tasks: Mapped[list["Task"]] = relationship(back_populates="column")     # navigation property to be able to traverse the related tasks
+    tasks: Mapped[list["Task"]] = relationship(back_populates="column", order_by="Task.index")     # navigation property to be able to traverse the related tasks and also sort them by index on loading

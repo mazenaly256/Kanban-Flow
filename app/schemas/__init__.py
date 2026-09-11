@@ -1,4 +1,4 @@
 from .user import UserRead, UserCreate
 from .login import LoginResponse, LoginRequest
-from .board import BoardRead, BoardCreate
-from .board_column import BoardColumnRead, BoardColumnCreate
+from .board import BoardRead, BoardCreate, BoardDetails
+from .board_column import BoardColumnRead, BoardColumnCreate, BoardColumnDetails

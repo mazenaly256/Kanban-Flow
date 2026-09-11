@@ -1,13 +1,14 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Path
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from starlette import status
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
-from app.core.security import get_current_user, require_owner_privileges
-from app.models import User, UserBoardRole, Board
-from app.schemas import BoardRead, BoardCreate
-
+from app.core.security import get_current_user, require_owner_privileges, require_board_member
+from app.models import User, UserBoardRole, Board, BoardColumn, Task
+from app.schemas import BoardRead, BoardCreate, BoardDetails, BoardColumnDetails
+from app.schemas.task import TaskRead
 
 router = APIRouter(prefix="/boards", tags=["boards"])
 
@@ -27,6 +28,41 @@ async def get_boards(db: AsyncSession = Depends(get_db), user: User = Depends(ge
 
     return user_boards
 
+
+@router.get(
+    path="/{board_id}/",
+    status_code=status.HTTP_200_OK,
+    response_model=BoardDetails,
+    responses={
+        404: {"description": "Board not found"},
+        403: {"description": "Unauthorized to access this resource"},
+    }
+)
+async def get_board_details_by_id(board_id: int, db: AsyncSession = Depends(get_db), user_board_role = Depends(require_board_member)):
+    result = await db.execute(
+        select(Board).where(Board.id == board_id)
+        .options(
+            selectinload(Board.columns)     # one single query for ALL columns across all fetched boards at once
+            .selectinload(BoardColumn.tasks)    # one single query for ALL tasks across all the fetched columns at once
+        )
+    )   # NO 1+N query problem, and NO duplication in the retrieved data that happens in join
+
+    board = result.scalar_one_or_none()
+
+    if not board:
+        raise HTTPException(status_code=404, detail="Board not found")
+
+    board_details = BoardDetails(board_id=board.id, board_title=board.title, role=user_board_role.role, columns=[])
+
+    for column in board.columns:
+        board_column_details = BoardColumnDetails(column_id=column.id, column_title=column.title, tasks=[])
+        for task in column.tasks:
+            board_column_details.tasks.append(TaskRead(id=task.id, column_id=task.column_id, title=task.title, description=task.description))
+
+        board_details.columns.append(board_column_details)
+
+
+    return board_details
 
 
 @router.post(
