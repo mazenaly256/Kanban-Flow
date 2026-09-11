@@ -15,4 +15,4 @@ class Board(Base):
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     title: Mapped[str]
 
-    columns: Mapped[list["BoardColumn"]] = relationship(back_populates="board")
+    columns: Mapped[list["BoardColumn"]] = relationship(back_populates="board", order_by="BoardColumn.index")
