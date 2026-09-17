@@ -1,10 +1,15 @@
 import asyncio
 import json
+
+from sqlalchemy import select
+
 from app.core.security import decode_jwt_access_token
+from app.core.database import AsyncSessionLocal
 
 from fastapi import FastAPI
-from starlette.websockets import WebSocket
+from starlette.websockets import WebSocket, WebSocketDisconnect
 
+from app.models import User
 from app.routers import health, auth, users, boards, board_columns, tasks
 
 app = FastAPI()
@@ -18,19 +23,46 @@ app.include_router(tasks.router)
 
 
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):     # executed once per connection
-    await websocket.accept()  # server accepts to upgrade the connection to websockets (accepting the handshake and responding with HTTP 101)
+async def websocket_endpoint(websocket_connection: WebSocket):     # executed once per connection, and each call has its own variables and values isolated from other calls/connections
+
+    await websocket_connection.accept()  # server accepts to upgrade the connection to websockets (accepting the handshake and responding with HTTP 101), once this line executed successfully, the client becomes connected
 
     try:
-        message = await asyncio.wait_for(websocket.receive_text(), timeout=10)     # wait in the background, either text is received or the timeout is reached and throws asyncio.TimeoutError exception
+        message = await asyncio.wait_for(websocket_connection.receive_text(), timeout=10)     # wait in the background, either text is received or the timeout is reached and throws asyncio.TimeoutError exception
 
         data = json.loads(message)
         jwt = data.get("token")
 
-        user = decode_jwt_access_token(jwt)
+        payload = decode_jwt_access_token(jwt)
 
-        if user is None:
-            await websocket.close(code=1008, reason="Invalid token")    # '.close()' sends the closing message/frame to the client
+        if payload is None:
+            await websocket_connection.close(code=1008, reason="Invalid token")    # '.close()' sends the closing message/frame to the client
+            return
+
+        user_id = payload.get('sub')
+
+
+
+        async with AsyncSessionLocal() as db:       # the db is not injected because this endpoint is executed once per the websocket connection, so the database session and connection will be reserved/held during the whole period of websocket connection
+            result = await db.execute(select(User).where(User.id == int(user_id)))
+            user_from_db = result.scalar_one_or_none()
+        # session is automatically closed here (due to 'with') and database connection is returned to the pool
+
+
+
+        try:
+            while True:
+                message = await websocket_connection.receive_text()     # pause the execution and wait till receive a message via this websocket connection, and throws exception if the connection is closed
+
+
+
+        except WebSocketDisconnect as closing_message:
+            print(f"Client disconnected {closing_message.code} - {closing_message.reason}")
+
 
     except asyncio.TimeoutError:
-        await websocket.close(code=1008, reason="Authentication timeout")   # sends the last message, that is the closing of connection
+        await websocket_connection.close(code=1008, reason="Authentication timeout")   # sends the last message, that is the closing of connection
+
+
+    except WebSocketDisconnect as closing_message:
+        print(f"Client disconnected {closing_message.code} - {closing_message.reason}")
