@@ -15,7 +15,7 @@ def test_ws_closes_when_no_jwt_sent_before_authentication_timeout():
 
 
 def test_ws_closes_with_invalid_token_reason_when_invalid_jwt_is_sent():
-    with client.websocket_connect("/ws") as ws:
+    with client.websocket_connect("/ws") as ws:     # the '.websocket_connect()' never returns the connection object until the websocket connection is successfully established with the server, and the server is now ready to receive message from the client (or buffer the message till the .receive_text() is executed on the server)
         ws.send_text('{"token": "any.invalid.token"}')
 
         with pytest.raises(WebSocketDisconnect) as exc_info:
