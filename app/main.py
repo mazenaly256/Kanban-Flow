@@ -12,6 +12,8 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 from app.models import User
 from app.routers import health, auth, users, boards, board_columns, tasks
 
+from app.websockets import user_connections
+
 app = FastAPI()
 
 app.include_router(health.router)
@@ -24,7 +26,6 @@ app.include_router(tasks.router)
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket_connection: WebSocket):     # executed once per connection, and each call has its own variables and values isolated from other calls/connections
-
     await websocket_connection.accept()  # server accepts to upgrade the connection to websockets (accepting the handshake and responding with HTTP 101), once this line executed successfully, the client becomes connected
 
     try:
@@ -41,13 +42,13 @@ async def websocket_endpoint(websocket_connection: WebSocket):     # executed on
 
         user_id = payload.get('sub')
 
-
-
         async with AsyncSessionLocal() as db:       # the db is not injected because this endpoint is executed once per the websocket connection, so the database session and connection will be reserved/held during the whole period of websocket connection
             result = await db.execute(select(User).where(User.id == int(user_id)))
             user_from_db = result.scalar_one_or_none()
         # session is automatically closed here (due to 'with') and database connection is returned to the pool
 
+
+        user_connections.add(user_id, websocket_connection)     # only the authenticated connections are what saved in memory
 
 
         try:
@@ -57,6 +58,7 @@ async def websocket_endpoint(websocket_connection: WebSocket):     # executed on
 
 
         except WebSocketDisconnect as closing_message:
+            user_connections.remove(user_id, websocket_connection)
             print(f"Client disconnected {closing_message.code} - {closing_message.reason}")
 
 
@@ -64,5 +66,5 @@ async def websocket_endpoint(websocket_connection: WebSocket):     # executed on
         await websocket_connection.close(code=1008, reason="Authentication timeout")   # sends the last message, that is the closing of connection
 
 
-    except WebSocketDisconnect as closing_message:
+    except WebSocketDisconnect as closing_message:      # enters here if the client disconnects while waiting for authenticating
         print(f"Client disconnected {closing_message.code} - {closing_message.reason}")
