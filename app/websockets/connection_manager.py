@@ -27,3 +27,7 @@ class UserConnections:
 
         else:
             return None
+
+
+
+user_connections = UserConnections()
