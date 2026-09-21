@@ -47,6 +47,7 @@ async def websocket_endpoint(websocket_connection: WebSocket):     # executed on
             user_from_db = result.scalar_one_or_none()
         # session is automatically closed here (due to 'with') and database connection is returned to the pool
 
+        await websocket_connection.send_json({"type": "successful_authentication"})     # acknowledgment of server that the user is now authenticated
 
         user_connections.add(user_id, websocket_connection)     # only the authenticated connections are what saved in memory
 
