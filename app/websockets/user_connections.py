@@ -19,3 +19,11 @@ class UserConnections:
 
             if not self._connections[user_id]:      # if the set is empty
                 del self._connections[user_id]      # then delete the key and value from the memory to clean up
+
+
+    def get(self, user_id: int) -> set[WebSocket] | None:
+        if user_id in self._connections:
+            return self._connections[user_id]
+
+        else:
+            return None
