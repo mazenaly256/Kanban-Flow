@@ -9,7 +9,7 @@ from app.core.database import AsyncSessionLocal
 from fastapi import FastAPI
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
-from app.models import User
+from app.models import User, UserBoardRole
 from app.routers import health, auth, users, boards, board_columns, tasks
 
 from app.websockets import user_connections, board_subscription_manager
@@ -68,7 +68,24 @@ async def websocket_endpoint(websocket_connection: WebSocket):     # executed on
                             "message": f"Message type: 'subscribe' has no board_id"
                         })
 
-                    board_subscription_manager.subscribe(board_id, websocket_connection)
+                        continue
+
+
+                    async with AsyncSessionLocal() as db:  # the db is not injected because this endpoint is executed once per the websocket connection, so the database session and connection will be reserved/held during the whole period of websocket connection
+                        result = await db.execute(
+                            select(UserBoardRole).where(UserBoardRole.board_id == board_id, UserBoardRole.user_id == user_id)
+                        )
+
+                        user_board_role = result.scalar_one_or_none()
+
+                        if user_board_role is None:
+                            await websocket_connection.send_json({
+                                "type": "error",
+                                "message": "User has no privileges to access the board"
+                            })
+
+                        else:
+                            board_subscription_manager.subscribe(board_id, websocket_connection)
 
 
 
@@ -78,8 +95,10 @@ async def websocket_endpoint(websocket_connection: WebSocket):     # executed on
                     if board_id is None:    # message has no 'board_id' field
                         await websocket_connection.send_json({
                             "type": "error",
-                            "message": f"Message type: 'unsubscribe' has no board_id"
+                            "message": "Message type: 'unsubscribe' has no board_id"
                         })
+
+                        continue
 
                     board_subscription_manager.unsubscribe(board_id, websocket_connection)
 
@@ -90,6 +109,8 @@ async def websocket_endpoint(websocket_connection: WebSocket):     # executed on
                         "type": "error",
                         "message": "Message type is required" if message_type is None else f"Unsupported message type: {message_type}"
                     })
+
+                    continue
 
 
 
