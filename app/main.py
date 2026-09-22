@@ -68,24 +68,24 @@ async def websocket_endpoint(websocket_connection: WebSocket):     # executed on
                             "message": f"Message type: 'subscribe' has no board_id"
                         })
 
-                        continue
+                    else:
+                        async with AsyncSessionLocal() as db:  # the db is not injected because this endpoint is executed once per the websocket connection, so the database session and connection will be reserved/held during the whole period of websocket connection
+                            result = await db.execute(
+                                select(UserBoardRole).where(UserBoardRole.board_id == board_id,
+                                                            UserBoardRole.user_id == user_id)
+                            )
 
+                            user_board_role = result.scalar_one_or_none()
 
-                    async with AsyncSessionLocal() as db:  # the db is not injected because this endpoint is executed once per the websocket connection, so the database session and connection will be reserved/held during the whole period of websocket connection
-                        result = await db.execute(
-                            select(UserBoardRole).where(UserBoardRole.board_id == board_id, UserBoardRole.user_id == user_id)
-                        )
+                            if user_board_role is None:
+                                await websocket_connection.send_json({
+                                    "type": "error",
+                                    "message": "User has no privileges to access the board"
+                                })
 
-                        user_board_role = result.scalar_one_or_none()
-
-                        if user_board_role is None:
-                            await websocket_connection.send_json({
-                                "type": "error",
-                                "message": "User has no privileges to access the board"
-                            })
-
-                        else:
-                            board_subscription_manager.subscribe(board_id, websocket_connection)
+                            else:
+                                board_subscription_manager.subscribe(board_id, websocket_connection)
+                                websocket_connection.state.board_id = board_id
 
 
 
@@ -98,9 +98,9 @@ async def websocket_endpoint(websocket_connection: WebSocket):     # executed on
                             "message": "Message type: 'unsubscribe' has no board_id"
                         })
 
-                        continue
-
-                    board_subscription_manager.unsubscribe(board_id, websocket_connection)
+                    else:
+                        board_subscription_manager.unsubscribe(board_id, websocket_connection)
+                        websocket_connection.state.board_id = None
 
 
 
@@ -110,13 +110,16 @@ async def websocket_endpoint(websocket_connection: WebSocket):     # executed on
                         "message": "Message type is required" if message_type is None else f"Unsupported message type: {message_type}"
                     })
 
-                    continue
-
-
 
 
         except WebSocketDisconnect as closing_message:
             user_connections.remove(user_id, websocket_connection)
+
+            # removing connection always implies removing a subscription to the board id that was subscribed to
+            board_id = getattr(websocket_connection.state, "board_id", None)    # as the custom attribute may not be set
+            if board_id is not None:
+                board_subscription_manager.unsubscribe(board_id, websocket_connection)
+
             print(f"Client disconnected {closing_message.code} - {closing_message.reason}")
 
 
