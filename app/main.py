@@ -12,7 +12,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 from app.models import User
 from app.routers import health, auth, users, boards, board_columns, tasks
 
-from app.websockets import user_connections
+from app.websockets import user_connections, board_subscription_manager
 
 app = FastAPI()
 
@@ -68,7 +68,7 @@ async def websocket_endpoint(websocket_connection: WebSocket):     # executed on
                             "message": f"Message type: 'subscribe' has no board_id"
                         })
 
-                    
+                    board_subscription_manager.subscribe(board_id, websocket_connection)
 
 
 
@@ -80,6 +80,9 @@ async def websocket_endpoint(websocket_connection: WebSocket):     # executed on
                             "type": "error",
                             "message": f"Message type: 'unsubscribe' has no board_id"
                         })
+
+                    board_subscription_manager.unsubscribe(board_id, websocket_connection)
+
 
 
                 else:
