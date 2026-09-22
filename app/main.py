@@ -59,49 +59,43 @@ async def websocket_endpoint(websocket_connection: WebSocket):     # executed on
                 data = json.loads(message)
                 message_type = data.get("type")
 
-                if message_type == "subscribe":
-                    board_id = data.get("board_id")
+                if message_type == "subscribe" or message_type == "unsubscribe":
+                    try:
+                        board_id = int(data.get("board_id"))
+                    except (ValueError, TypeError):
+                        await websocket_connection.send_json(
+                            {"type": "error", "message": "board_id must be given and must be a valid integer"})
+                        continue
 
-                    if board_id is None:    # message has no 'board_id' field
+                    async with AsyncSessionLocal() as db:  # the db is not injected because this endpoint is executed once per the websocket connection, so the database session and connection will be reserved/held during the whole period of websocket connection
+                        result = await db.execute(
+                            select(UserBoardRole).where(UserBoardRole.board_id == board_id, UserBoardRole.user_id == int(user_id))
+                        )
+
+                        user_board_role = result.scalar_one_or_none()
+
+                    if user_board_role is None:
                         await websocket_connection.send_json({
                             "type": "error",
-                            "message": f"Message type: 'subscribe' has no board_id"
+                            "message": "User has no privileges to access the board"
                         })
 
-                    else:
-                        async with AsyncSessionLocal() as db:  # the db is not injected because this endpoint is executed once per the websocket connection, so the database session and connection will be reserved/held during the whole period of websocket connection
-                            result = await db.execute(
-                                select(UserBoardRole).where(UserBoardRole.board_id == board_id,
-                                                            UserBoardRole.user_id == user_id)
-                            )
+                        continue
 
-                            user_board_role = result.scalar_one_or_none()
+                    if message_type == "subscribe":
+                        # it is required to firstly unsubscribe from the previous board id which the user was subscribed in
+                        previous_subscription_board_id = getattr(websocket_connection.state, "board_id", None)
+                        if previous_subscription_board_id is not None:
+                            board_subscription_manager.unsubscribe(previous_subscription_board_id, websocket_connection)
 
-                            if user_board_role is None:
-                                await websocket_connection.send_json({
-                                    "type": "error",
-                                    "message": "User has no privileges to access the board"
-                                })
-
-                            else:
-                                board_subscription_manager.subscribe(board_id, websocket_connection)
-                                websocket_connection.state.board_id = board_id
-
-
-
-                elif message_type == "unsubscribe":
-                    board_id = data.get("board_id")
-
-                    if board_id is None:    # message has no 'board_id' field
-                        await websocket_connection.send_json({
-                            "type": "error",
-                            "message": "Message type: 'unsubscribe' has no board_id"
-                        })
+                        board_subscription_manager.subscribe(board_id, websocket_connection)
+                        websocket_connection.state.board_id = board_id
+                        await websocket_connection.send_json({"type": "successful_board_subscription"})  # acknowledgment from server that the user is now subscribed in the board and will see live updates
 
                     else:
                         board_subscription_manager.unsubscribe(board_id, websocket_connection)
                         websocket_connection.state.board_id = None
-
+                        await websocket_connection.send_json({"type": "successful_board_unsubscription"})
 
 
                 else:
