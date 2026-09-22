@@ -3,7 +3,7 @@ from starlette.websockets import WebSocket
 
 class UserConnections:
     def __init__(self):
-        # connections dictionary is defined here to be fabulous
+        # connections dictionary is defined here to map specific user_id with their connections
         self._connections: dict[int, set[WebSocket]] = {}  # set is used for fast removal, as order is not important here
 
     def add(self, user_id: int, ws: WebSocket):
