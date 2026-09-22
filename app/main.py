@@ -56,6 +56,39 @@ async def websocket_endpoint(websocket_connection: WebSocket):     # executed on
             while True:
                 message = await websocket_connection.receive_text()     # pause the execution and wait till receive a message via this websocket connection, and throws exception if the connection is closed
 
+                data = json.loads(message)
+                message_type = data.get("type")
+
+                if message_type == "subscribe":
+                    board_id = data.get("board_id")
+
+                    if board_id is None:    # message has no 'board_id' field
+                        await websocket_connection.send_json({
+                            "type": "error",
+                            "message": f"Message type: 'subscribe' has no board_id"
+                        })
+
+                    
+
+
+
+                elif message_type == "unsubscribe":
+                    board_id = data.get("board_id")
+
+                    if board_id is None:    # message has no 'board_id' field
+                        await websocket_connection.send_json({
+                            "type": "error",
+                            "message": f"Message type: 'unsubscribe' has no board_id"
+                        })
+
+
+                else:
+                    await websocket_connection.send_json({
+                        "type": "error",
+                        "message": "Message type is required" if message_type is None else f"Unsupported message type: {message_type}"
+                    })
+
+
 
 
         except WebSocketDisconnect as closing_message:
