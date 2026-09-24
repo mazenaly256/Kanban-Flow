@@ -8,7 +8,7 @@ class TaskRead(BaseModel):
     column_id: int
     title: str
     description: str
-    # index/position of the task is not required to be shown, it is just for ordering the tasks
+    index: float    # required so frontend clients can sort tasks correctly on real-time task position changing broadcasts
 
 
 
