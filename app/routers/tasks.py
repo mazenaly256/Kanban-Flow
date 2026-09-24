@@ -140,6 +140,11 @@ async def update_task_position(task_id: int, board_id: int, column_id: int, task
 
     await db.commit()
 
+    # the message should contain the old column id and the destination column id, so the frontend does not have to scan all columns to find the task and delete it from the old column.
+    # frontend just searches for the task by id in the old column then transfer it to the new column in the right position
+    await broadcast_to_board_subscribers(board_id, {"type": "task_position_updated", "details":{"id": task_id, "old_column_id": column_id, "updated_column_id": task.column_id, "updated_task_index": task.index}})
+
+
 
 
 
