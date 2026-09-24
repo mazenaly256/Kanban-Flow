@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.core.security import require_board_member, require_manager_privileges_or_higher
 from app.models import Task, BoardColumn
 from app.schemas.task import TaskRead, TaskCreate, TaskUpdateTitleAndDescription, TaskUpdateChangeColumnAndPositionIndex
+from app.websockets import broadcast_to_board_subscribers
 
 
 router = APIRouter(prefix="/boards/{board_id}/columns/{column_id}", tags=["tasks"])
@@ -63,6 +64,8 @@ async def create_new_task(task_create_dto: TaskCreate, board_id: int, column_id:
     db.add(new_task)
     await db.commit()
     await db.refresh(new_task)
+
+    await broadcast_to_board_subscribers(board_id, {"type": "new_task_added", "details": TaskRead.model_validate(new_task).model_dump()})
 
     return new_task.id
 

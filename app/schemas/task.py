@@ -1,7 +1,9 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class TaskRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)     # informs the 'model_validate' method to read values from attributes not via square brackets as dictionaries
+
     id: int
     column_id: int
     title: str
