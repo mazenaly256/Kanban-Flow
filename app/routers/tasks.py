@@ -157,3 +157,5 @@ async def delete_task(task_id: int, column_id: int, board_id: int, _ = Depends(r
 
     await db.delete(task)
     await db.commit()
+
+    await broadcast_to_board_subscribers(board_id, {"type": "task_deleted", "details":{"id": task_id}})
