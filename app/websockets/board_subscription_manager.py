@@ -27,7 +27,7 @@ class BoardSubscriptionManager:
             return self._subscribed_connections[board_id]
 
         else:
-            return None
+            return set()
 
 
 
