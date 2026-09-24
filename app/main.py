@@ -89,7 +89,7 @@ async def websocket_endpoint(websocket_connection: WebSocket):     # executed on
                             board_subscription_manager.unsubscribe(previous_subscription_board_id, websocket_connection)
 
                         board_subscription_manager.subscribe(board_id, websocket_connection)
-                        websocket_connection.state.board_id = board_id
+                        websocket_connection.state.board_id = board_id      # saves the board_id that the user is subscribed in, to fast remove the connection from subscribers of the board when the connection is closed (instead of looping through all the boards till find the connection and delete it)
                         await websocket_connection.send_json({"type": "successful_board_subscription"})  # acknowledgment from server that the user is now subscribed in the board and will see live updates
 
                     else:
