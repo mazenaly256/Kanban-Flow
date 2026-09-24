@@ -90,6 +90,9 @@ async def update_task_title_and_description(task_id: int, board_id: int, column_
 
     await db.commit()
 
+    await broadcast_to_board_subscribers(board_id, {"type": "task_details_updated", "details":{"id": task_id, "title": task_update_dto.new_title, "description": task_update_dto.new_description}})
+
+
 
 
 @router.patch(
