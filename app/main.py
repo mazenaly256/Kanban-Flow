@@ -12,7 +12,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 from app.models import User, UserBoardRole
 from app.routers import health, auth, users, boards, board_columns, tasks
 
-from app.websockets import user_connections, board_subscription_manager
+from app.websockets import user_connections, board_subscription_manager, rate_limiter
 
 app = FastAPI()
 
@@ -55,6 +55,10 @@ async def websocket_endpoint(websocket_connection: WebSocket):     # executed on
         try:
             while True:
                 message = await websocket_connection.receive_text()     # pause the execution and wait till receive a message via this websocket connection, and throws exception if the connection is closed
+
+                if not rate_limiter.allow(user_id):
+                    await websocket_connection.close(code=1008, reason="Messages rate limit exceeded")
+                    break
 
                 data = json.loads(message)
                 message_type = data.get("type")
