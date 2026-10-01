@@ -9,6 +9,7 @@ class TaskRead(BaseModel):
     title: str
     description: str
     index: float    # required so frontend clients can sort tasks correctly on real-time task position changing broadcasts
+    version: int    # required to be sent to the update endpoint when the client needs to update the task
 
 
 
@@ -21,6 +22,7 @@ class TaskCreate(BaseModel):
 class TaskUpdateTitleAndDescription(BaseModel):
     new_title: str
     new_description: str
+    version: int    # required to be sent to get compared inside the PATCH endpoint with the version of the task in the database
 
 
 

@@ -1,7 +1,7 @@
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
@@ -85,12 +85,23 @@ async def update_task_title_and_description(task_id: int, board_id: int, column_
         raise HTTPException(status_code=404, detail="Task not found in the target column and board")
 
 
-    task.title = task_update_dto.new_title
-    task.description = task_update_dto.new_description
+    # update and check is made in one statement while locking the row till commit to prevent the racing condition when many requests check the version, so two requests can't both pass the version check.
+    # other requests will have the old version so they update nothing as the row is updated
+    update_statement = update(Task).where(Task.id == task_id, Task.version == task_update_dto.version).values(
+            title=task_update_dto.new_title,
+            description=task_update_dto.new_description,
+            version=Task.version + 1,
+        ).returning(Task.version)
+
+    new_version = (await db.execute(update_statement)).scalar_one_or_none()     # returns None if no row is updated
+
+    if new_version is None:
+        raise HTTPException(status_code=409, detail="The edited version is stale, task is updated by someone else")
 
     await db.commit()
 
-    await broadcast_to_board_subscribers(board_id, {"type": "task_details_updated", "details":{"id": task_id, "title": task_update_dto.new_title, "description": task_update_dto.new_description}})
+    # the version should be broadcasted so frontend can deal with users that are editing the same task
+    await broadcast_to_board_subscribers(board_id, {"type": "task_details_updated", "details":{"id": task_id, "title": task_update_dto.new_title, "description": task_update_dto.new_description, "version": new_version}})
 
 
 
