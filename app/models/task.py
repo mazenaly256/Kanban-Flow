@@ -16,5 +16,6 @@ class Task(Base):
     title: Mapped[str]
     description: Mapped[str | None]
     index: Mapped[float]
+    version: Mapped[int] = mapped_column(server_default='1', nullable=False)    # db server adds 1 as value for the old rows
 
     column: Mapped["BoardColumn"] = relationship(back_populates="tasks")    # navigation property to be able to traverse the related column
