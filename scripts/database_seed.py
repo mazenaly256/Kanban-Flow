@@ -14,8 +14,8 @@ TASKS_PER_COLUMN = 100
 async def seed():
     async with AsyncSessionLocal() as db:
         user = User(   # insert user directly into DB to avoid testing register functionality in this test
-            email="dummy_email_for_seeding",
-            username="user_for_seeding",
+            email="dummy_email_for_seeding@gmail.com",
+            username="username_for_seeding",
             hashed_password=(await run_in_threadpool(
                 bcrypt.hashpw,
                 "dummy_password_for_seeding".encode(),
