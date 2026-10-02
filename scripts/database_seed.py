@@ -1,7 +1,6 @@
 import asyncio
 
 import bcrypt
-from pip._internal.commands import index
 from starlette.concurrency import run_in_threadpool
 
 from app.core.database import AsyncSessionLocal
