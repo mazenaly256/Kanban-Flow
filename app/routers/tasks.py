@@ -12,7 +12,7 @@ from app.schemas.task import TaskRead, TaskCreate, TaskUpdateTitleAndDescription
 from app.websockets import broadcast_to_board_subscribers
 
 
-router = APIRouter(prefix="/boards/{board_id}/columns/{column_id}", tags=["tasks"])
+router = APIRouter(prefix="/boards/{board_id}/columns/{column_id}/tasks", tags=["tasks"])
 
 
 @router.get(
