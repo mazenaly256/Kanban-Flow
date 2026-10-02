@@ -57,7 +57,7 @@ async def get_board_details_by_id(board_id: int, db: AsyncSession = Depends(get_
     for column in board.columns:
         board_column_details = BoardColumnDetails(column_id=column.id, column_title=column.title, tasks=[])
         for task in column.tasks:
-            board_column_details.tasks.append(TaskRead(id=task.id, column_id=task.column_id, title=task.title, description=task.description))
+            board_column_details.tasks.append(TaskRead(id=task.id, column_id=task.column_id, title=task.title, description=task.description, index=task.index, version=task.version))
 
         board_details.columns.append(board_column_details)
 
