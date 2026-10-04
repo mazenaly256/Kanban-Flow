@@ -31,7 +31,7 @@ export function setup() {
 export default function (data) {
     const boardId = Math.floor(Math.random() * 50) + 1;    // to query random board every time and simulate the real-world behavior
 
-    let res = http.get(`${BASE_URL}/boards/${boardId}`, {
+    let res = http.get(`${BASE_URL}/boards/${boardId}/`, {
         headers: {
             Authorization: `Bearer ${data.token}`,
         }

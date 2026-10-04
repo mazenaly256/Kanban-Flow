@@ -12,11 +12,11 @@ const noContent204 = new Counter('updates_accepted');
 const conflict409 = new Counter('updates_rejected');
 
 
-const URL = `http://localhost:8000/boards/${1}/columns/${1}/tasks/${1}/details`;
+const URL = `http://localhost:8000/boards/${1}/columns/${1}/tasks/${2}/details/`;
 
 export function setup() {
   const res = http.post(
-    'http://localhost:8000/auth/login',   // adapt to your login route
+    'http://localhost:8000/auth/login/',   // adapt to your login route
     JSON.stringify({ email: 'dummy_email_for_seeding@gmail.com', password: 'dummy_password_for_seeding' }),
     { headers: { 'Content-Type': 'application/json' } },
   );
@@ -26,7 +26,7 @@ export function setup() {
 export default function (token) {
   const res = http.patch(
     URL,
-    JSON.stringify({ new_title: `VU ${__VU}`, new_description: 'race', version: 3 }),
+    JSON.stringify({ new_title: `VU ${__VU}`, new_description: 'race', version: 1 }),
     { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } },
   );
 

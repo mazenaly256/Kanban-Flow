@@ -30,7 +30,7 @@ export function setup() {
 }
 
 export default function (data) {
-    let res = http.get(`${BASE_URL}/boards/${BOARD_ID}`, {
+    let res = http.get(`${BASE_URL}/boards/${BOARD_ID}/`, {
         headers: {
             Authorization: `Bearer ${data.token}`,
         }
