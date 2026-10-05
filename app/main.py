@@ -14,6 +14,8 @@ from app.routers import health, auth, users, boards, board_columns, tasks
 
 from app.websockets import user_connections, board_subscription_manager, rate_limiter
 
+import redis.asyncio as redis
+
 app = FastAPI()
 
 app.include_router(health.router)
@@ -22,6 +24,10 @@ app.include_router(users.router)
 app.include_router(boards.router)
 app.include_router(board_columns.router)
 app.include_router(tasks.router)
+
+
+# create the client once at startup so the client can reuse the already-established TCP connections with Redis.
+redis_client = redis.from_url("redis://localhost:6379")
 
 
 @app.websocket("/ws")
