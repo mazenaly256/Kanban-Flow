@@ -3,8 +3,9 @@ import json
 
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.core.security import decode_jwt_access_token
-from app.core.database import AsyncSessionLocal
+from app.core.database import AsyncSessionLocal, engine
 
 from fastapi import FastAPI
 from starlette.websockets import WebSocket, WebSocketDisconnect
@@ -16,7 +17,19 @@ from app.websockets import user_connections, board_subscription_manager, rate_li
 
 import redis.asyncio as redis
 
-app = FastAPI()
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app):
+    # create the redis client once at startup so the client can reuse the already-established TCP connections with Redis.
+    async with redis.from_url(settings.cache_url, decode_responses=True) as redis_client:
+        app.state.redis = redis_client  # app.state is the way to access the variables that are defined inside the lifespan during setup
+
+        yield   # the app is serving request after this line is executed
+
+    await engine.dispose()   # free the resources allocated to connect with DB server
+
+app = FastAPI(lifespan=lifespan)
 
 app.include_router(health.router)
 app.include_router(auth.router)
@@ -26,8 +39,6 @@ app.include_router(board_columns.router)
 app.include_router(tasks.router)
 
 
-# create the client once at startup so the client can reuse the already-established TCP connections with Redis.
-redis_client = redis.from_url("redis://localhost:6379")
 
 
 @app.websocket("/ws")
