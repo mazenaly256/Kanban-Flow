@@ -5,6 +5,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
+from app.core.cache import get_cache_client, cache_board_delete
 from app.core.database import get_db
 from app.core.security import require_board_member, require_manager_privileges_or_higher
 from app.models import BoardColumn
@@ -33,7 +34,7 @@ async def get_board_columns(board_id: int = Path(), db: AsyncSession = Depends(g
     path="/",
     status_code=status.HTTP_201_CREATED,
 )
-async def create_new_column(new_column_from_request: BoardColumnCreate, board_id: int, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db)):
+async def create_new_column(new_column_from_request: BoardColumnCreate, board_id: int, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db), redis_client = Depends(get_cache_client)):
     result = await db.execute(
     select(func.max(BoardColumn.index)).where(BoardColumn.board_id == board_id)
 )
@@ -45,6 +46,8 @@ async def create_new_column(new_column_from_request: BoardColumnCreate, board_id
     await db.commit()
     await db.refresh(new_board_column)
 
+    await cache_board_delete(redis_client, board_id)    # invalidates the cache entry before broadcasting, as the newly created column does not exist in the cached board details
+
     return new_board_column.id
 
 
@@ -53,7 +56,7 @@ async def create_new_column(new_column_from_request: BoardColumnCreate, board_id
     status_code=status.HTTP_204_NO_CONTENT,
 )
 # board_id is required for FastAPI DI container to resolve the board_id parameter in the dependencies (to authorize the access to the board)
-async def delete_column(column_id: int, board_id: int, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db)):
+async def delete_column(column_id: int, board_id: int, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db), redis_client = Depends(get_cache_client)):
     result = await db.execute(
         select(BoardColumn).where(BoardColumn.id == column_id, BoardColumn.board_id == board_id)
 )
@@ -65,3 +68,5 @@ async def delete_column(column_id: int, board_id: int, _ = Depends(require_manag
 
     await db.delete(column)
     await db.commit()
+
+    await cache_board_delete(redis_client, board_id)    # invalidates the cache entry before broadcasting, as the deleted column still appears in the cached board details
