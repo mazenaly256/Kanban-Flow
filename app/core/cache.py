@@ -23,4 +23,8 @@ async def cache_board_set(redis_client, board_id: int, value: str):
 
 
 async def cache_board_delete(redis_client, board_id: int):
-    await redis_client.delete(f"board:{board_id}")
+    try:    # to avoid crashing when there is a problem in Redis
+        await redis_client.delete(f"board:{board_id}")
+
+    except RedisError:
+        pass
