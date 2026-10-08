@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.cache import cache_board_get, get_cache_client, cache_board_set
 from app.core.database import get_db
 from app.core.security import get_current_user, require_owner_privileges, require_board_member
-from app.models import User, UserBoardRole, Board, BoardColumn, Task
+from app.models import User, UserBoardRole, Board, BoardColumn
 from app.schemas import BoardRead, BoardCreate, BoardDetails, BoardColumnDetails
 from app.schemas.task import TaskRead
 
@@ -40,7 +40,7 @@ async def get_boards(db: AsyncSession = Depends(get_db), user: User = Depends(ge
         403: {"description": "Unauthorized to access this resource"},
     }
 )
-async def get_board_details_by_id(board_id: int, db: AsyncSession = Depends(get_db), user_board_role = Depends(require_board_member), redis_client = Depends(get_cache_client)):
+async def get_board_details_by_id(board_id: int, db: AsyncSession = Depends(get_db), _ = Depends(require_board_member), redis_client = Depends(get_cache_client)):
     raw_board_details_json = await cache_board_get(redis_client, board_id)
 
     if raw_board_details_json is not None:  # cache hit
