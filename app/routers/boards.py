@@ -4,9 +4,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from starlette import status
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.cache import cache_board_get, get_cache_client, cache_board_set, cache_board_delete
 from app.core.database import get_db
 from app.core.security import get_current_user, require_owner_privileges, require_board_member
-from app.models import User, UserBoardRole, Board, BoardColumn, Task
+from app.models import User, UserBoardRole, Board, BoardColumn
 from app.schemas import BoardRead, BoardCreate, BoardDetails, BoardColumnDetails
 from app.schemas.task import TaskRead
 
@@ -38,7 +40,14 @@ async def get_boards(db: AsyncSession = Depends(get_db), user: User = Depends(ge
         403: {"description": "Unauthorized to access this resource"},
     }
 )
-async def get_board_details_by_id(board_id: int, db: AsyncSession = Depends(get_db), user_board_role = Depends(require_board_member)):
+async def get_board_details_by_id(board_id: int, db: AsyncSession = Depends(get_db), _ = Depends(require_board_member), redis_client = Depends(get_cache_client)):
+    raw_board_details_json = await cache_board_get(redis_client, board_id)
+
+    if raw_board_details_json is not None:  # cache hit
+        return BoardDetails.model_validate_json(raw_board_details_json)
+
+
+    # cache miss
     result = await db.execute(
         select(Board).where(Board.id == board_id)
         .options(
@@ -52,7 +61,7 @@ async def get_board_details_by_id(board_id: int, db: AsyncSession = Depends(get_
     if not board:
         raise HTTPException(status_code=404, detail="Board not found")
 
-    board_details = BoardDetails(board_id=board.id, board_title=board.title, role=user_board_role.role, columns=[])
+    board_details = BoardDetails(board_id=board.id, board_title=board.title, columns=[])
 
     for column in board.columns:
         board_column_details = BoardColumnDetails(column_id=column.id, column_title=column.title, tasks=[])
@@ -61,6 +70,7 @@ async def get_board_details_by_id(board_id: int, db: AsyncSession = Depends(get_
 
         board_details.columns.append(board_column_details)
 
+    await cache_board_set(redis_client, board_id, board_details.model_dump_json())  # populates cache
 
     return board_details
 
@@ -96,7 +106,7 @@ async def create_board(new_board_from_request: BoardCreate, db: AsyncSession = D
         204: {"description": "Deleted Successfully"}
     }
 )
-async def delete_board(board_id: int = Path(), db: AsyncSession = Depends(get_db), _ = Depends(require_owner_privileges)):
+async def delete_board(board_id: int = Path(), db: AsyncSession = Depends(get_db), _ = Depends(require_owner_privileges), redis_client = Depends(get_cache_client)):
     result = await db.execute(
         select(Board).where(Board.id == board_id)
     )
@@ -108,3 +118,5 @@ async def delete_board(board_id: int = Path(), db: AsyncSession = Depends(get_db
 
     await db.delete(board)
     await db.commit()
+
+    await cache_board_delete(redis_client, board_id)

@@ -11,7 +11,6 @@ class BoardRead(BaseModel):
 class BoardDetails(BaseModel):
     board_id: int
     board_title: str
-    role: Literal["owner", "manager", "assignee", "viewer"]
     columns: list[BoardColumnDetails]
 
 
