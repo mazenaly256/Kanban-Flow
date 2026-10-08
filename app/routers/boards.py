@@ -5,7 +5,7 @@ from sqlalchemy.orm import selectinload
 from starlette import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.cache import cache_board_get, get_cache_client, cache_board_set
+from app.core.cache import cache_board_get, get_cache_client, cache_board_set, cache_board_delete
 from app.core.database import get_db
 from app.core.security import get_current_user, require_owner_privileges, require_board_member
 from app.models import User, UserBoardRole, Board, BoardColumn
@@ -106,7 +106,7 @@ async def create_board(new_board_from_request: BoardCreate, db: AsyncSession = D
         204: {"description": "Deleted Successfully"}
     }
 )
-async def delete_board(board_id: int = Path(), db: AsyncSession = Depends(get_db), _ = Depends(require_owner_privileges)):
+async def delete_board(board_id: int = Path(), db: AsyncSession = Depends(get_db), _ = Depends(require_owner_privileges), redis_client = Depends(get_cache_client)):
     result = await db.execute(
         select(Board).where(Board.id == board_id)
     )
@@ -118,3 +118,5 @@ async def delete_board(board_id: int = Path(), db: AsyncSession = Depends(get_db
 
     await db.delete(board)
     await db.commit()
+
+    await cache_board_delete(redis_client, board_id)
