@@ -20,7 +20,7 @@ import redis.asyncio as redis
 from contextlib import asynccontextmanager
 
 @asynccontextmanager
-async def lifespan(app):
+async def lifespan(app):    # wraps the application's whole life
     # create the redis client once at startup so the client can reuse the already-established TCP connections with Redis.
     async with redis.from_url(settings.cache_url, decode_responses=True) as redis_client:
         app.state.redis = redis_client  # app.state is the way to access the variables that are defined inside the lifespan during setup
