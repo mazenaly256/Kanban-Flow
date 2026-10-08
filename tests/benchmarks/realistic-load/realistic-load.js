@@ -34,7 +34,6 @@ export const options = {
     realistic: {
       executor: 'ramping-arrival-rate',   // open model: new sessions start at a fixed rate, whether or not earlier ones have received their responses
       startRate: 5,
-      preAllocatedVUs: 200,
       stages: [
         { target: 10, duration: '20s' },  // ramp from 5 to 10 new sessions/s over 20s, evenly time spaced
         { target: 20, duration: '20s' },
