@@ -63,7 +63,6 @@ async def create_new_task(task_create_dto: TaskCreate, board_id: int, column_id:
     new_task = Task(column_id=column_id, title=task_create_dto.task_title, description=task_create_dto.task_description, index=new_task_index)
 
     db.add(new_task)
-    await db.commit()
     await db.flush()  # INSERT sent, so the id exists, but nothing is committed in DB yet
 
     broadcasting_message =  {
@@ -72,6 +71,7 @@ async def create_new_task(task_create_dto: TaskCreate, board_id: int, column_id:
     }
 
     db.add(OutboxEvent(event_type="new_task_added", board_id=board_id, payload=broadcasting_message))
+    await db.commit()   # commits both the outbox event row and the task, so event never loses its side effects
 
     return new_task.id
 
