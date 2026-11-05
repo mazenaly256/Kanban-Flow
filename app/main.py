@@ -4,6 +4,7 @@ import json
 from sqlalchemy import select
 
 from app.core.config import settings
+from app.core.outbox_relay import relay_loop
 from app.core.security import decode_jwt_access_token
 from app.core.database import AsyncSessionLocal, engine
 
@@ -25,9 +26,21 @@ async def lifespan(app):    # wraps the application's whole life
     async with redis.from_url(settings.cache_url, decode_responses=True) as redis_client:
         app.state.redis = redis_client  # app.state is the way to access the variables that are defined inside the lifespan during setup
 
-        yield   # the app is serving request after this line is executed
+        # background task: runs relay_loop next to the request handlers until canceled
+        relay_task = asyncio.create_task(relay_loop(redis_client))
 
-    await engine.dispose()   # free the resources allocated to connect with DB server
+        yield   # after this line, the app serves requests and the relay runs next to them
+
+        relay_task.cancel()     # ask the relay to stop, it stops at its next await
+
+        try:
+            await relay_task    # wait to really stop/cancel the async task of relay_loop, raising CancelledError on canceling
+        except asyncio.CancelledError:
+            pass
+
+    # the redis client is automatically disposed due to 'with' keyword
+    await engine.dispose()
+
 
 app = FastAPI(lifespan=lifespan)
 
