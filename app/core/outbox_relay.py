@@ -24,7 +24,7 @@ async def relay_loop(redis_client):
                 # where(published_at is None) lets Postgres use the partial index
 
             for row in rows:    # loop over all pending tasks (not published)
-                await cache_board_delete(redis_client, row.board_id)
+                await cache_board_delete(redis_client, row.board_id)    # invalidates the cache entry before broadcasting, so the modified board with old tasks does not appear in the cached board details
                 await broadcast_to_board_subscribers(row.board_id, row.payload)
 
                 async with AsyncSessionLocal() as db:

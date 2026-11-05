@@ -1,6 +1,6 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
@@ -8,7 +8,7 @@ from starlette import status
 from app.core.cache import get_cache_client, cache_board_delete
 from app.core.database import get_db
 from app.core.security import require_board_member, require_manager_privileges_or_higher
-from app.models import Task, BoardColumn
+from app.models import Task, BoardColumn, OutboxEvent
 from app.schemas.task import TaskRead, TaskCreate, TaskUpdateTitleAndDescription, TaskUpdateChangeColumnAndPositionIndex
 from app.websockets import broadcast_to_board_subscribers
 
@@ -64,11 +64,14 @@ async def create_new_task(task_create_dto: TaskCreate, board_id: int, column_id:
 
     db.add(new_task)
     await db.commit()
-    await db.refresh(new_task)
+    await db.flush()  # INSERT sent, so the id exists, but nothing is committed in DB yet
 
-    await cache_board_delete(redis_client, board_id)    # invalidates the cache entry before broadcasting, as added task does not appear in the cached board details
+    broadcasting_message =  {
+        "type": "new_task_added",
+        "details": TaskRead.model_validate(new_task).model_dump(),
+    }
 
-    await broadcast_to_board_subscribers(board_id, {"type": "new_task_added", "details": TaskRead.model_validate(new_task).model_dump()})
+    db.add(OutboxEvent(event_type="new_task_added", board_id=board_id, payload=broadcasting_message))
 
     return new_task.id
 
