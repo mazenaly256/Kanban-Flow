@@ -76,6 +76,8 @@ async def create_new_task(task_create_dto: TaskCreate, board_id: int, column_id:
     return new_task.id
 
 
+
+
 @router.patch(
     path="/{task_id}/details",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -104,14 +106,25 @@ async def update_task_title_and_description(task_id: int, board_id: int, column_
     if new_version is None:
         raise HTTPException(status_code=409, detail="The edited version is stale, task is updated by someone else")
 
+    broadcasting_message = {
+        "type": "task_details_updated",
+        "details": {
+            "id": task_id,
+            "title": task_update_dto.new_title,
+            "description": task_update_dto.new_description,
+
+            # the version should be broadcasted so frontend can deal with users that are editing the same task
+            "version": new_version
+        }
+    }
+
+    db.add(OutboxEvent(
+        event_type="task_details_updated",
+        board_id=board_id,
+        payload=broadcasting_message,
+    ))
+
     await db.commit()
-
-    await cache_board_delete(redis_client, board_id)    # invalidates the cache entry before broadcasting
-
-    # the version should be broadcasted so frontend can deal with users that are editing the same task
-    await broadcast_to_board_subscribers(board_id, {"type": "task_details_updated", "details":{"id": task_id, "title": task_update_dto.new_title, "description": task_update_dto.new_description, "version": new_version}})
-
-
 
 
 @router.patch(
@@ -157,13 +170,26 @@ async def update_task_position(task_id: int, board_id: int, column_id: int, task
 
     task.index = (task_change_column_and_update_index_dto.destination_predecessor_task_index + task_change_column_and_update_index_dto.destination_successor_task_index) / 2.0
 
+    broadcasting_message = {
+        "type": "task_position_updated",
+        "details": {
+            "id": task_id,
+            "old_column_id": column_id,
+            "updated_column_id": task.column_id,
+            "updated_task_index": task.index
+        }
+    }
+
+    db.add(OutboxEvent(
+        event_type="task_position_updated",
+        board_id=board_id,
+
+        # the message should contain the old column id and the destination column id, so the frontend does not have to scan all columns to find the task and delete it from the old column.
+        # frontend just searches for the task by id in the old column then transfer it to the new column in the right position
+        payload=broadcasting_message
+    ))
+
     await db.commit()
-
-    await cache_board_delete(redis_client, board_id)    # invalidates the cache entry before broadcasting
-
-    # the message should contain the old column id and the destination column id, so the frontend does not have to scan all columns to find the task and delete it from the old column.
-    # frontend just searches for the task by id in the old column then transfer it to the new column in the right position
-    await broadcast_to_board_subscribers(board_id, {"type": "task_position_updated", "details":{"id": task_id, "old_column_id": column_id, "updated_column_id": task.column_id, "updated_task_index": task.index}})
 
 
 
@@ -185,8 +211,16 @@ async def delete_task(task_id: int, column_id: int, board_id: int, _ = Depends(r
         raise HTTPException(status_code=404, detail="Task not found in the target column and board")
 
     await db.delete(task)
+
+    broadcasting_message = {
+        "type": "task_deleted",
+        "details": {"id": task_id}
+    }
+
+    db.add(OutboxEvent(
+        event_type="task_deleted",
+        board_id=board_id,
+        payload=broadcasting_message
+    ))
+
     await db.commit()
-
-    await cache_board_delete(redis_client, board_id)    # invalidates the cache entry before broadcasting
-
-    await broadcast_to_board_subscribers(board_id, {"type": "task_deleted", "details":{"id": task_id}})
