@@ -3,6 +3,7 @@ import json
 
 from sqlalchemy import select
 
+from app.core.cache_consumer import cache_invalidation_consumer
 from app.core.config import settings
 from app.core.outbox_relay import relay_loop
 from app.core.security import decode_jwt_access_token
@@ -11,6 +12,7 @@ from app.core.database import AsyncSessionLocal, engine
 from fastapi import FastAPI
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
+from app.core.websocket_broadcasting_consumer import websocket_broadcasting_consumer
 from app.models import User, UserBoardRole
 from app.routers import health, auth, users, boards, board_columns, tasks
 
@@ -26,17 +28,30 @@ async def lifespan(app):    # wraps the application's whole life
     async with redis.from_url(settings.cache_url, decode_responses=True) as redis_client:
         app.state.redis = redis_client  # app.state is the way to access the variables that are defined inside the lifespan during setup
 
-        # background task: runs relay_loop next to the request handlers until canceled
+        # mkstream=True creates the stream automatically if it doesn't exist
+        await redis_client.xgroup_create("task:events", "group-cache-invalidator", id="0", mkstream=True)
+        await redis_client.xgroup_create("task:events", "group-websocket-broadcaster", id="0", mkstream=True)
+
+        # background tasks: run next to the request handlers until canceled, continuous polling
         relay_task = asyncio.create_task(relay_loop(redis_client))
+        cache_worker_polling_task = asyncio.create_task(cache_invalidation_consumer(redis_client))
+        websocket_broadcaster_worker_polling_task = asyncio.create_task(websocket_broadcasting_consumer(redis_client))
+
 
         yield   # after this line, the app serves requests and the relay runs next to them
 
         relay_task.cancel()     # ask the relay to stop, it stops at its next await
+        cache_worker_polling_task.cancel()
+        websocket_broadcaster_worker_polling_task.cancel()
 
-        try:
-            await relay_task    # wait to really stop/cancel the async task of relay_loop, raising CancelledError on canceling
-        except asyncio.CancelledError:
-            pass
+        # wait for all three to finish cleaning up in parallel (and suppress CancelledError)
+        await asyncio.gather(
+            relay_task,
+            cache_worker_polling_task,
+            websocket_broadcaster_worker_polling_task,
+            return_exceptions=True,
+        )
+
 
     # the redis client is automatically disposed due to 'with' keyword
     await engine.dispose()
