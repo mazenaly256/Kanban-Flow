@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 
 from sqlalchemy import select, update, func
@@ -24,8 +25,19 @@ async def relay_loop(redis_client):
                 # where(published_at is None) lets Postgres use the partial index
 
             for row in rows:    # loop over all pending tasks (not published)
-                await cache_board_delete(redis_client, row.board_id)    # invalidates the cache entry before broadcasting, so the modified board with old tasks does not appear in the cached board details
-                await broadcast_to_board_subscribers(row.board_id, row.payload)
+
+                payload_str = row.payload if isinstance(row.payload, str) else json.dumps(row.payload)      # serialize the payload as Redis streams never understands python dictionary
+
+                await redis_client.xadd(
+                    "task:events",
+                    {
+                        "outbox_id": str(row.id),       # for future, so that the outbox record in DB can be traced
+                        "board_id": str(row.board_id),
+                        "payload": payload_str,
+                    },
+                    maxlen=10000,
+                    approximate=True,
+                )
 
                 async with AsyncSessionLocal() as db:
                     await db.execute(update(OutboxEvent).where(OutboxEvent.id == row.id).values(published_at=func.now()))
