@@ -4,9 +4,7 @@ import logging
 
 from sqlalchemy import select, update, func
 
-from app.core.cache import cache_board_delete
 from app.core.database import AsyncSessionLocal
-from app.websockets import broadcast_to_board_subscribers
 from app.models import OutboxEvent
 
 
