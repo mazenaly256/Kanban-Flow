@@ -1,6 +1,7 @@
 import asyncio
 import json
 
+from redis import ResponseError
 from sqlalchemy import select
 
 from app.core.cache_consumer import cache_invalidation_consumer
@@ -29,8 +30,17 @@ async def lifespan(app):    # wraps the application's whole life
         app.state.redis = redis_client  # app.state is the way to access the variables that are defined inside the lifespan during setup
 
         # mkstream=True creates the stream automatically if it doesn't exist
-        await redis_client.xgroup_create("task:events", "group-cache-invalidator", id="0", mkstream=True)
-        await redis_client.xgroup_create("task:events", "group-websocket-broadcaster", id="0", mkstream=True)
+        try:
+            await redis_client.xgroup_create("task:events", "group-cache-invalidator", id="0", mkstream=True)
+        except ResponseError as e:
+            if "BUSYGROUP" not in str(e):   # if the problem is not because of the group already exists
+                raise
+
+        try:
+            await redis_client.xgroup_create("task:events", "group-websocket-broadcaster", id="0", mkstream=True)
+        except ResponseError as e:
+            if "BUSYGROUP" not in str(e):   # if the problem is not because of the group already exists
+                raise
 
         # background tasks: run next to the request handlers until canceled, continuous polling
         relay_task = asyncio.create_task(relay_loop(redis_client))
