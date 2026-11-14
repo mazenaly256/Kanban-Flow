@@ -1,16 +1,14 @@
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
-from app.core.cache import get_cache_client, cache_board_delete
 from app.core.database import get_db
 from app.core.security import require_board_member, require_manager_privileges_or_higher
-from app.models import Task, BoardColumn
+from app.models import Task, BoardColumn, OutboxEvent
 from app.schemas.task import TaskRead, TaskCreate, TaskUpdateTitleAndDescription, TaskUpdateChangeColumnAndPositionIndex
-from app.websockets import broadcast_to_board_subscribers
 
 
 router = APIRouter(prefix="/boards/{board_id}/columns/{column_id}/tasks", tags=["tasks"])
@@ -45,7 +43,7 @@ async def get_all_tasks_in_column(board_id: int, column_id: int, db: AsyncSessio
     path="/",
     status_code=status.HTTP_201_CREATED,
 )
-async def create_new_task(task_create_dto: TaskCreate, board_id: int, column_id: int, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db), redis_client = Depends(get_cache_client)):
+async def create_new_task(task_create_dto: TaskCreate, board_id: int, column_id: int, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(BoardColumn).where(BoardColumn.id == column_id, BoardColumn.board_id == board_id)
     )
@@ -63,21 +61,26 @@ async def create_new_task(task_create_dto: TaskCreate, board_id: int, column_id:
     new_task = Task(column_id=column_id, title=task_create_dto.task_title, description=task_create_dto.task_description, index=new_task_index)
 
     db.add(new_task)
-    await db.commit()
-    await db.refresh(new_task)
+    await db.flush()  # INSERT sent, so the id exists, but nothing is committed in DB yet
 
-    await cache_board_delete(redis_client, board_id)    # invalidates the cache entry before broadcasting, as added task does not appear in the cached board details
+    broadcasting_message =  {
+        "type": "new_task_added",
+        "details": TaskRead.model_validate(new_task).model_dump(),
+    }
 
-    await broadcast_to_board_subscribers(board_id, {"type": "new_task_added", "details": TaskRead.model_validate(new_task).model_dump()})
+    db.add(OutboxEvent(event_type="new_task_added", board_id=board_id, payload=broadcasting_message))
+    await db.commit()   # commits both the outbox event row and the task, so event never loses its side effects
 
     return new_task.id
+
+
 
 
 @router.patch(
     path="/{task_id}/details",
     status_code=status.HTTP_204_NO_CONTENT,
 )
-async def update_task_title_and_description(task_id: int, board_id: int, column_id: int, task_update_dto: TaskUpdateTitleAndDescription, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db), redis_client = Depends(get_cache_client)):
+async def update_task_title_and_description(task_id: int, board_id: int, column_id: int, task_update_dto: TaskUpdateTitleAndDescription, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Task).join(BoardColumn, BoardColumn.id == Task.column_id).where(Task.id == task_id, Task.column_id == column_id, BoardColumn.board_id == board_id)
     )
@@ -101,14 +104,25 @@ async def update_task_title_and_description(task_id: int, board_id: int, column_
     if new_version is None:
         raise HTTPException(status_code=409, detail="The edited version is stale, task is updated by someone else")
 
+    broadcasting_message = {
+        "type": "task_details_updated",
+        "details": {
+            "id": task_id,
+            "title": task_update_dto.new_title,
+            "description": task_update_dto.new_description,
+
+            # the version should be broadcasted so frontend can deal with users that are editing the same task
+            "version": new_version
+        }
+    }
+
+    db.add(OutboxEvent(
+        event_type="task_details_updated",
+        board_id=board_id,
+        payload=broadcasting_message,
+    ))
+
     await db.commit()
-
-    await cache_board_delete(redis_client, board_id)    # invalidates the cache entry before broadcasting
-
-    # the version should be broadcasted so frontend can deal with users that are editing the same task
-    await broadcast_to_board_subscribers(board_id, {"type": "task_details_updated", "details":{"id": task_id, "title": task_update_dto.new_title, "description": task_update_dto.new_description, "version": new_version}})
-
-
 
 
 @router.patch(
@@ -116,7 +130,7 @@ async def update_task_title_and_description(task_id: int, board_id: int, column_
     status_code=status.HTTP_204_NO_CONTENT,
     description="Updates the task position, including the column and its order between tasks in the column",
 )
-async def update_task_position(task_id: int, board_id: int, column_id: int, task_change_column_and_update_index_dto: TaskUpdateChangeColumnAndPositionIndex, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db), redis_client = Depends(get_cache_client)):
+async def update_task_position(task_id: int, board_id: int, column_id: int, task_change_column_and_update_index_dto: TaskUpdateChangeColumnAndPositionIndex, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Task).join(BoardColumn, BoardColumn.id == Task.column_id).where(Task.id == task_id, Task.column_id == column_id, BoardColumn.board_id == board_id)
     )
@@ -154,13 +168,26 @@ async def update_task_position(task_id: int, board_id: int, column_id: int, task
 
     task.index = (task_change_column_and_update_index_dto.destination_predecessor_task_index + task_change_column_and_update_index_dto.destination_successor_task_index) / 2.0
 
+    broadcasting_message = {
+        "type": "task_position_updated",
+        "details": {
+            "id": task_id,
+            "old_column_id": column_id,
+            "updated_column_id": task.column_id,
+            "updated_task_index": task.index
+        }
+    }
+
+    db.add(OutboxEvent(
+        event_type="task_position_updated",
+        board_id=board_id,
+
+        # the message should contain the old column id and the destination column id, so the frontend does not have to scan all columns to find the task and delete it from the old column.
+        # frontend just searches for the task by id in the old column then transfer it to the new column in the right position
+        payload=broadcasting_message
+    ))
+
     await db.commit()
-
-    await cache_board_delete(redis_client, board_id)    # invalidates the cache entry before broadcasting
-
-    # the message should contain the old column id and the destination column id, so the frontend does not have to scan all columns to find the task and delete it from the old column.
-    # frontend just searches for the task by id in the old column then transfer it to the new column in the right position
-    await broadcast_to_board_subscribers(board_id, {"type": "task_position_updated", "details":{"id": task_id, "old_column_id": column_id, "updated_column_id": task.column_id, "updated_task_index": task.index}})
 
 
 
@@ -171,7 +198,7 @@ async def update_task_position(task_id: int, board_id: int, column_id: int, task
     status_code=status.HTTP_204_NO_CONTENT,
 )
 # board_id is required for FastAPI DI container to resolve the board_id parameter in the dependencies (to authorize the access to the board)
-async def delete_task(task_id: int, column_id: int, board_id: int, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db), redis_client = Depends(get_cache_client)):
+async def delete_task(task_id: int, column_id: int, board_id: int, _ = Depends(require_manager_privileges_or_higher), db: AsyncSession = Depends(get_db)):
     result = await db.execute(
         select(Task).join(BoardColumn, BoardColumn.id == Task.column_id).where(Task.id == task_id, Task.column_id == column_id, BoardColumn.board_id == board_id)
     )
@@ -182,8 +209,16 @@ async def delete_task(task_id: int, column_id: int, board_id: int, _ = Depends(r
         raise HTTPException(status_code=404, detail="Task not found in the target column and board")
 
     await db.delete(task)
+
+    broadcasting_message = {
+        "type": "task_deleted",
+        "details": {"id": task_id}
+    }
+
+    db.add(OutboxEvent(
+        event_type="task_deleted",
+        board_id=board_id,
+        payload=broadcasting_message
+    ))
+
     await db.commit()
-
-    await cache_board_delete(redis_client, board_id)    # invalidates the cache entry before broadcasting
-
-    await broadcast_to_board_subscribers(board_id, {"type": "task_deleted", "details":{"id": task_id}})
